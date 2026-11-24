@@ -1,15 +1,13 @@
 import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
-import { z } from 'zod';
 import {
   executeWaybillConfirmedAction,
   waybillConfirmationInputSchema,
 } from '../confirmation/index.js';
 import type { ServerContext } from '../context.js';
-import { xmlIntSchema } from '../soap/xml.js';
+import { createIntResultResponseSchema, xmlIntSchema } from '../soap/xml.js';
 import { toolErrorResult } from './errors.js';
 
-const saveInvoiceResponseSchema = z.object({
-  save_invoiceResult: xmlIntSchema,
+const saveInvoiceResponseSchema = createIntResultResponseSchema('save_invoice', {
   out_inv_id: xmlIntSchema.optional().default(0),
 });
 

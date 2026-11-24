@@ -111,3 +111,44 @@ export const xmlIntSchema = z
     }
     return parsed;
   });
+
+export function createIntResultResponseSchema<TOp extends string>(
+  operation: TOp,
+): z.ZodType<number>;
+export function createIntResultResponseSchema<
+  TOp extends string,
+  TExtra extends z.ZodRawShape,
+>(
+  operation: TOp,
+  extraFields: TExtra,
+): z.ZodType<
+  { readonly [K in `${TOp}Result`]: number } & z.output<z.ZodObject<TExtra>>
+>;
+export function createIntResultResponseSchema<
+  TOp extends string,
+  TExtra extends z.ZodRawShape,
+>(operation: TOp, extraFields?: TExtra): z.ZodType<unknown> {
+  const resultKey = `${operation}Result` as const;
+  if (extraFields !== undefined) {
+    return z.object({
+      [resultKey]: xmlIntSchema,
+      ...extraFields,
+    });
+  }
+  return z
+    .object({
+      [resultKey]: xmlIntSchema,
+    })
+    .transform((record) => record[resultKey] as number);
+}
+
+export function createBooleanResultResponseSchema<TOp extends string>(
+  operation: TOp,
+): z.ZodType<boolean> {
+  const resultKey = `${operation}Result` as const;
+  return z
+    .object({
+      [resultKey]: xmlBooleanSchema,
+    })
+    .transform((record) => record[resultKey] as boolean);
+}

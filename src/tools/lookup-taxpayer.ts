@@ -1,7 +1,7 @@
 import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import { z } from 'zod';
 import type { ServerContext } from '../context.js';
-import { xmlBooleanSchema } from '../soap/index.js';
+import { createBooleanResultResponseSchema } from '../soap/index.js';
 import { georgianTinSchema } from '../validation/common.js';
 import { formatSoapErrorResult } from './errors.js';
 
@@ -27,11 +27,8 @@ const getNameFromTinResponseSchema = z
     typeof value === 'string' ? '' : value.get_name_from_tinResult,
   );
 
-const isVatPayerTinResponseSchema = z
-  .object({
-    is_vat_payer_tinResult: xmlBooleanSchema,
-  })
-  .transform((value) => value.is_vat_payer_tinResult);
+const isVatPayerTinResponseSchema =
+  createBooleanResultResponseSchema('is_vat_payer_tin');
 
 export function registerLookupTaxpayerTool(
   server: FastMCP,

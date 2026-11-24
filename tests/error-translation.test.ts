@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { z } from 'zod';
-import { loadConfig } from '../src/config.js';
-import { createLogger } from '../src/logger.js';
-import { createRsgeServer } from '../src/server.js';
-import { createSoapClient } from '../src/soap/index.js';
+import { createRsgeServer, loadConfig } from '../src/index.js';
 import {
   errorCodesXml,
   rsgeResultStatusErrorXml,
@@ -12,6 +8,7 @@ import {
   waybillUnitsXml,
   xmlResponse,
 } from './fixtures/soap.js';
+import { getWaybillResponseXml, type WaybillFixture } from './fixtures/waybill.js';
 
 function createTestConfig(
   user = 'demo_user:206322102',
@@ -314,14 +311,16 @@ describe('Automatic lazy RS.ge error-code translation', () => {
     }
   });
 
-  it('translates scalar negative integer SOAP responses (e.g. close_waybill, send_waybill) into RsgeApiError', async () => {
+  it('uses canonical GLOSSARY terminology and actual save_waybill_draft field names in translated hints (-1005, -1036, -1037, -2004)', async () => {
+    const codes = [-1005, -1036, -1037, -2004];
+    let callIndex = 0;
+
     const fakeFetch: typeof globalThis.fetch = vi.fn(async (_input, init) => {
       const soapAction = new Headers(init?.headers).get('soapaction') ?? '';
-      if (soapAction === '"http://tempuri.org/close_waybill"') {
-        return xmlResponse(scalarOperationResultXml('close_waybill', -101));
-      }
-      if (soapAction === '"http://tempuri.org/send_waybill"') {
-        return xmlResponse(scalarOperationResultXml('send_waybill', '-100'));
+      if (soapAction === '"http://tempuri.org/get_waybill_types"') {
+        const code = codes[callIndex]!;
+        callIndex += 1;
+        return xmlResponse(rsgeResultStatusErrorXml('get_waybill_types', code));
       }
       if (soapAction === '"http://tempuri.org/get_error_codes"') {
         return xmlResponse(errorCodesXml());
@@ -329,36 +328,147 @@ describe('Automatic lazy RS.ge error-code translation', () => {
       throw new Error(`Unexpected SOAPAction: ${soapAction}`);
     });
 
-    const config = createTestConfig();
-    const logger = createLogger({
-      secrets: [config.serviceUser, config.servicePassword],
-      level: 'silent',
+    const server = createRsgeServer({
+      config: createTestConfig(),
+      fetch: fakeFetch,
+      logLevel: 'silent',
     });
-    const soapClient = createSoapClient({ config, logger, fetch: fakeFetch });
+    const client = await Client.connect(server);
 
-    await expect(
-      soapClient.callOperation(
-        'close_waybill',
-        { waybill_id: 123 },
-        z.object({ close_waybillResult: z.string() }),
-      ),
-    ).rejects.toMatchObject({
-      name: 'RsgeApiError',
-      code: -101,
-      operation: 'close_waybill',
-      georgianText: 'ზედნადები არ ეკუთვნის გადამხდელს',
+    try {
+      const hints = new Map<number, string>();
+      for (const code of codes) {
+        const res = await client.callToolRaw('get_reference_data', {
+          category: 'waybill_types',
+        });
+        expect(res.isError).toBe(true);
+        const payload = JSON.parse(
+          res.content[0]?.type === 'text' ? res.content[0].text : '{}',
+        ) as Record<string, unknown>;
+        expect(payload.code).toBe(code);
+        hints.set(code, String(payload.hint));
+      }
+
+      // -1005: canonical GLOSSARY term "საიდენტიფიკაციო კოდი", never avoided "პირადი ნომერი"
+      expect(hints.get(-1005)).toContain('საიდენტიფიკაციო კოდი');
+      expect(hints.get(-1005)).not.toContain('პირადი ნომერი');
+
+      // -1036, -1037, -2004: real save_waybill_draft field names, never transId/transTxt/unitTxt
+      expect(hints.get(-1036)).toContain('transportTypeId=0');
+      expect(hints.get(-1036)).not.toContain('transId');
+      expect(hints.get(-1037)).toContain('transportText');
+      expect(hints.get(-1037)).not.toContain('transTxt');
+      expect(hints.get(-2004)).toContain('unitText');
+      expect(hints.get(-2004)).not.toContain('unitTxt');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('translates scalar negative integer SOAP responses (close_waybill, send_waybill) through the MCP protocol seam', async () => {
+    const sampleWaybill: WaybillFixture = {
+      id: 123,
+      waybillNumber: '0000012345',
+      type: 2,
+      status: 1,
+      buyerTin: '206322102',
+      fullAmount: '100.00',
+      goods: [
+        {
+          id: 1,
+          name: 'საქონელი',
+          unitId: 1,
+          quantity: '1',
+          price: '100.00',
+          amount: '100.00',
+          vatType: 0,
+        },
+      ],
+    };
+
+    let errorCodesFetches = 0;
+    const fakeFetch: typeof globalThis.fetch = vi.fn(async (_input, init) => {
+      const soapAction = new Headers(init?.headers).get('soapaction') ?? '';
+      if (soapAction === '"http://tempuri.org/get_waybill"') {
+        return xmlResponse(getWaybillResponseXml('get_waybill', sampleWaybill));
+      }
+      if (soapAction === '"http://tempuri.org/close_waybill"') {
+        return xmlResponse(scalarOperationResultXml('close_waybill', -101));
+      }
+      if (soapAction === '"http://tempuri.org/send_waybill"') {
+        return xmlResponse(scalarOperationResultXml('send_waybill', '-100'));
+      }
+      if (soapAction === '"http://tempuri.org/get_error_codes"') {
+        errorCodesFetches += 1;
+        return xmlResponse(errorCodesXml());
+      }
+      throw new Error(`Unexpected SOAPAction: ${soapAction}`);
     });
 
-    await expect(
-      soapClient.callOperation(
-        'send_waybill',
-        { waybill_id: 123 },
-        z.object({ send_waybillResult: z.string() }),
-      ),
-    ).rejects.toMatchObject({
-      name: 'RsgeApiError',
-      code: -100,
-      operation: 'send_waybill',
+    const server = createRsgeServer({
+      config: createTestConfig(),
+      fetch: fakeFetch,
+      logLevel: 'silent',
     });
+    const client = await Client.connect(server);
+
+    try {
+      // 1. close_waybill returning scalar negative integer -101
+      const closePreview = await client.callToolRaw('close_waybill', {
+        waybill_id: 123,
+      });
+      const closeToken = (
+        JSON.parse(
+          closePreview.content[0]?.type === 'text' ? closePreview.content[0].text : '{}',
+        ) as { confirmation_token: string }
+      ).confirmation_token;
+
+      const closeRes = await client.callToolRaw('close_waybill', {
+        waybill_id: 123,
+        confirmation_token: closeToken,
+      });
+      expect(closeRes.isError).toBe(true);
+      const closePayload = JSON.parse(
+        closeRes.content[0]?.type === 'text' ? closeRes.content[0].text : '{}',
+      ) as Record<string, unknown>;
+      expect(closePayload).toMatchObject({
+        error: 'RSGE_API_ERROR',
+        code: -101,
+        operation: 'close_waybill',
+        georgianText: 'ზედნადები არ ეკუთვნის გადამხდელს',
+      });
+
+      // 2. send_waybill returning scalar negative numeric string '-100'
+      const sendPreview = await client.callToolRaw('send_waybill', {
+        waybill_id: 123,
+      });
+      const sendToken = (
+        JSON.parse(
+          sendPreview.content[0]?.type === 'text' ? sendPreview.content[0].text : '{}',
+        ) as { confirmation_token: string }
+      ).confirmation_token;
+
+      const sendRes = await client.callToolRaw('send_waybill', {
+        waybill_id: 123,
+        confirmation_token: sendToken,
+      });
+      expect(sendRes.isError).toBe(true);
+      const sendPayload = JSON.parse(
+        sendRes.content[0]?.type === 'text' ? sendRes.content[0].text : '{}',
+      ) as Record<string, unknown>;
+      expect(sendPayload).toMatchObject({
+        error: 'RSGE_API_ERROR',
+        code: -100,
+        operation: 'send_waybill',
+      });
+      expect(String(sendPayload.hint)).toMatch(/IP/i);
+
+      // Shared Reference Data error-codes session cache fetched once across both tools
+      expect(errorCodesFetches).toBe(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 });

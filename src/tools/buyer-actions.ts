@@ -1,12 +1,11 @@
 import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
-import { z } from 'zod';
 import {
   executeWaybillConfirmedAction,
   waybillConfirmationInputSchema,
   type BilingualLegalEffect,
 } from '../confirmation/index.js';
 import type { ServerContext } from '../context.js';
-import { xmlBooleanSchema } from '../soap/xml.js';
+import { createBooleanResultResponseSchema } from '../soap/xml.js';
 import { getWaybillConfirmationInfo } from '../waybill/index.js';
 import { toolErrorResult } from './errors.js';
 
@@ -70,15 +69,6 @@ const BUYER_DECISIONS: readonly BuyerDecisionConfig[] = [
     failVerbEn: 'reject',
   },
 ];
-
-function createBooleanResultResponseSchema<TOp extends string>(operation: TOp) {
-  const resultKey = `${operation}Result` as const;
-  return z
-    .object({
-      [resultKey]: xmlBooleanSchema,
-    })
-    .transform((record) => record[resultKey] as boolean);
-}
 
 export function registerBuyerActionTools(
   server: FastMCP,

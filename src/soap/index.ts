@@ -10,6 +10,8 @@ export {
 export {
   SOAP_NAMESPACE,
   buildSoapEnvelope,
+  createBooleanResultResponseSchema,
+  createIntResultResponseSchema,
   escapeXml,
   parseSoapXml,
   serializeSoapParams,

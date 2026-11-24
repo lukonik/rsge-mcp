@@ -6,7 +6,7 @@ import {
   type BilingualLegalEffect,
 } from '../confirmation/index.js';
 import type { ServerContext } from '../context.js';
-import { xmlIntSchema } from '../soap/xml.js';
+import { createIntResultResponseSchema } from '../soap/xml.js';
 import { getWaybillStatusInfo } from '../waybill/index.js';
 import { toolErrorResult } from './errors.js';
 
@@ -88,15 +88,6 @@ const INT_STATUS_MUTATIONS: readonly IntStatusMutationConfig[] = [
     successVerbEn: 'cancelled',
   },
 ];
-
-function createIntResultResponseSchema<TOp extends string>(operation: TOp) {
-  const resultKey = `${operation}Result` as const;
-  return z
-    .object({
-      [resultKey]: xmlIntSchema,
-    })
-    .transform((record) => record[resultKey] as number);
-}
 
 export function registerSellerLifecycleTools(
   server: FastMCP,

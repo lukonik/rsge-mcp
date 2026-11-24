@@ -108,7 +108,7 @@ export const KNOWN_RSGE_ERRORS: Readonly<Record<number, KnownErrorMeta>> = {
     fallbackGeorgianText: 'მძღოლის საიდენტიფიკაციო კოდი არასწორია',
     englishText: 'Invalid Driver TIN',
     hint:
-      'მიუთითეთ მძღოლის 11-ნიშნა პირადი ნომერი ან მონიშნეთ უცხო ქვეყნის მოქალაქე. ' +
+      'მიუთითეთ მძღოლის 11-ნიშნა საიდენტიფიკაციო კოდი ან მონიშნეთ უცხო ქვეყნის მოქალაქე. ' +
       'Provide a valid 11-digit Driver TIN or mark the driver as a foreign citizen.',
   },
   [-1006]: {
@@ -161,8 +161,8 @@ export const KNOWN_RSGE_ERRORS: Readonly<Record<number, KnownErrorMeta>> = {
     englishText:
       'Transport fields must be empty for Delivery without Transportation (Type 3)',
     hint:
-      'ტიპი 3 ზედნადებისთვის დატოვეთ მისამართები, მძღოლი და ავტომობილი ცარიელი და მიუთითეთ transId=0. ' +
-      'For Type 3 Waybills, omit addresses/driver/vehicle and set transId=0.',
+      'ტიპი 3 ზედნადებისთვის დატოვეთ მისამართები, მძღოლი და ავტომობილი ცარიელი და მიუთითეთ transportTypeId=0. ' +
+      'For Type 3 Waybills, omit addresses/driver/vehicle and set transportTypeId=0.',
   },
   [-1037]: {
     fallbackGeorgianText:
@@ -170,8 +170,8 @@ export const KNOWN_RSGE_ERRORS: Readonly<Record<number, KnownErrorMeta>> = {
     englishText:
       'Custom Transport Type text (TRANS_TXT) is required when TRANS_ID is 4 (Other)',
     hint:
-      'მიუთითეთ ტრანსპორტირების ტიპის აღწერა (transTxt), როცა ტრანსპორტირების ტიპი არის 4 (სხვა). ' +
-      'Provide transTxt when Transport Type is 4 (Other).',
+      'მიუთითეთ ტრანსპორტირების ტიპის აღწერა (transportText), როცა ტრანსპორტირების ტიპი არის 4 (სხვა). ' +
+      'Provide transportText when Transport Type is 4 (Other).',
   },
   [-2001]: {
     fallbackGeorgianText: 'საქონლის დასახელება ცარიელია',
@@ -199,8 +199,8 @@ export const KNOWN_RSGE_ERRORS: Readonly<Record<number, KnownErrorMeta>> = {
     englishText:
       'Custom measurement unit text (UNIT_TXT) is required when UNIT_ID is 99 (Other)',
     hint:
-      'როცა ზომის ერთეულის ID არის 99 (სხვა), აუცილებელია unitTxt ველის შევსება. ' +
-      'Provide unitTxt whenever measurement unit ID is 99 (Other).',
+      'როცა ზომის ერთეულის ID არის 99 (სხვა), აუცილებელია unitText ველის შევსება. ' +
+      'Provide unitText whenever measurement unit ID is 99 (Other).',
   },
   [-2005]: {
     fallbackGeorgianText: 'საქონლის პოზიციის თანხა არ ემთხვევა გამოთვლილ ჯამს',

@@ -239,24 +239,30 @@ function detectRsgeErrorCode(
 export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClient {
   const { config, logger } = options;
   const fetchFn = options.fetch ?? globalThis.fetch;
-  let internalErrorCodesCache: Promise<readonly RsgeErrorCodeItem[]> | undefined;
+
+  function createHttpStatusError(
+    operation: string,
+    status: number,
+    logMessage: string,
+    cause?: unknown,
+  ): SoapTransportError {
+    logger.error(logMessage, { operation, status });
+    return new SoapTransportError(
+      `RS.ge სერვისმა დააბრუნა HTTP ${status} შეცდომა (${operation}). ` +
+        `RS.ge WayBillService returned HTTP ${status} (${operation}).`,
+      { statusCode: status, ...(cause !== undefined ? { cause } : {}) },
+    );
+  }
 
   async function resolveErrorCodesCatalog(): Promise<
     readonly RsgeErrorCodeItem[] | undefined
   > {
+    if (!options.getErrorCodesForTranslation) {
+      return undefined;
+    }
+
     try {
-      if (options.getErrorCodesForTranslation) {
-        return await options.getErrorCodesForTranslation();
-      }
-      if (internalErrorCodesCache === undefined) {
-        internalErrorCodesCache = getErrorCodes()
-          .then((items) => Object.freeze([...items]))
-          .catch((error: unknown) => {
-            internalErrorCodesCache = undefined;
-            throw error;
-          });
-      }
-      return await internalErrorCodesCache;
+      return await options.getErrorCodesForTranslation();
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error);
       logger.warn('Failed to lazily load RS.ge error codes for translation', {
@@ -342,14 +348,11 @@ export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClie
       parsedXml = parseSoapXml(responseText);
     } catch (error) {
       if (!response.ok) {
-        logger.error('RS.ge SOAP HTTP error with non-XML body', {
+        throw createHttpStatusError(
           operation,
-          status: response.status,
-        });
-        throw new SoapTransportError(
-          `RS.ge სერვისმა დააბრუნა HTTP ${response.status} შეცდომა (${operation}). ` +
-            `RS.ge WayBillService returned HTTP ${response.status} (${operation}).`,
-          { statusCode: response.status, cause: error },
+          response.status,
+          'RS.ge SOAP HTTP error with non-XML body',
+          error,
         );
       }
       throw new SoapParseError(
@@ -362,14 +365,10 @@ export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClie
     const envelopeResult = soapEnvelopeSchema.safeParse(parsedXml);
     if (!envelopeResult.success) {
       if (!response.ok) {
-        logger.error('RS.ge SOAP HTTP error without SOAP Envelope', {
+        throw createHttpStatusError(
           operation,
-          status: response.status,
-        });
-        throw new SoapTransportError(
-          `RS.ge სერვისმა დააბრუნა HTTP ${response.status} შეცდომა (${operation}). ` +
-            `RS.ge WayBillService returned HTTP ${response.status} (${operation}).`,
-          { statusCode: response.status },
+          response.status,
+          'RS.ge SOAP HTTP error without SOAP Envelope',
         );
       }
       throw new SoapParseError(
@@ -397,14 +396,10 @@ export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClie
     }
 
     if (!response.ok) {
-      logger.error('RS.ge returned non-2xx HTTP status', {
+      throw createHttpStatusError(
         operation,
-        status: response.status,
-      });
-      throw new SoapTransportError(
-        `RS.ge სერვისმა დააბრუნა HTTP ${response.status} შეცდომა (${operation}). ` +
-          `RS.ge WayBillService returned HTTP ${response.status} (${operation}).`,
-        { statusCode: response.status },
+        response.status,
+        'RS.ge returned non-2xx HTTP status',
       );
     }
 
