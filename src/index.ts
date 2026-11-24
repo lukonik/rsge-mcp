@@ -36,9 +36,31 @@ export {
   type RsgeSoapClient,
   type SoapParamValue,
 } from './soap/index.js';
-export { registerCheckConnectionTool } from './tools/check-connection.js';
 export {
   IP_ALLOWLIST_AND_CREDS_HINT,
+  KNOWN_RSGE_ERRORS,
+  REFERENCE_RESOURCE_URIS,
+  RsgeApiError,
+  TRANSPORT_TYPE_ENGLISH_NAMES,
+  WAYBILL_TYPE_ENGLISH_NAMES,
+  createReferenceDataStore,
+  getKnownEnglishErrorText,
+  translateRsgeErrorCode,
+  type CreateReferenceDataStoreOptions,
+  type ReferenceCategory,
+  type ReferenceDataPayload,
+  type ReferenceDataStore,
+  type ReferenceItemByCategory,
+  type RsgeErrorCodeItem,
+  type TranslatedRsgeError,
+  type TransportTypeItem,
+  type WaybillTypeItem,
+  type WaybillUnitItem,
+} from './reference/index.js';
+export { registerReferenceResources } from './resources/reference.js';
+export { registerCheckConnectionTool } from './tools/check-connection.js';
+export { registerGetReferenceDataTool } from './tools/get-reference-data.js';
+export {
   NETWORK_FAILURE_HINT,
   formatSoapErrorResult,
   toolErrorResult,

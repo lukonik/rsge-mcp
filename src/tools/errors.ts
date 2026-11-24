@@ -1,14 +1,16 @@
 import { ToolResult } from '@prefecthq/fastmcp-ts/server';
 import type { RsgeLogger } from '../logger.js';
 import {
+  IP_ALLOWLIST_AND_CREDS_HINT,
+  RsgeApiError,
+} from '../reference/index.js';
+import {
   SoapFaultError,
   SoapParseError,
   SoapTransportError,
 } from '../soap/index.js';
 
-export const IP_ALLOWLIST_AND_CREDS_HINT =
-  'გადაამოწმეთ RSGE_SERVICE_USER და RSGE_SERVICE_PASSWORD მონაცემები და დარწმუნდით, რომ თქვენი გამავალი IP მისამართი დამატებულია დაშვებულ IP-ებში RS.ge პორტალის სერვისის მომხმარებლის პარამეტრებში. ' +
-  'Verify your RSGE_SERVICE_USER and RSGE_SERVICE_PASSWORD credentials and confirm your outbound IP address is allowlisted for this Service User on the RS.ge portal.';
+export { IP_ALLOWLIST_AND_CREDS_HINT };
 
 export const NETWORK_FAILURE_HINT =
   'გადაამოწმეთ ინტერნეტ კავშირი, RSGE_ENDPOINT მისამართი და ფაირვოლის/IP დაშვების პარამეტრები RS.ge-სთვის. ' +
@@ -30,6 +32,24 @@ export function formatSoapErrorResult(
   logger: RsgeLogger,
   extra: Record<string, unknown> = {},
 ): ToolResult {
+  if (error instanceof RsgeApiError) {
+    return toolErrorResult(
+      {
+        ...extra,
+        error: 'RSGE_API_ERROR',
+        code: error.code,
+        operation: error.operation,
+        ...(error.errorType !== undefined ? { errorType: error.errorType } : {}),
+        georgianText: error.georgianText,
+        englishText: error.englishText,
+        message: `${error.georgianText} / ${error.englishText}`,
+        hint: error.hint,
+        knownCode: error.knownCode,
+      },
+      logger,
+    );
+  }
+
   if (error instanceof SoapFaultError) {
     return toolErrorResult(
       {

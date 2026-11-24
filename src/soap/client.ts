@@ -2,10 +2,22 @@ import { z } from 'zod';
 import type { RsgeConfig } from '../config.js';
 import type { RsgeLogger } from '../logger.js';
 import {
+  RsgeApiError,
+  TRANSPORT_TYPE_ENGLISH_NAMES,
+  WAYBILL_TYPE_ENGLISH_NAMES,
+  getKnownEnglishErrorText,
+  translateRsgeErrorCode,
+  type RsgeErrorCodeItem,
+  type TransportTypeItem,
+  type WaybillTypeItem,
+  type WaybillUnitItem,
+} from '../reference/index.js';
+import {
   SOAP_NAMESPACE,
   buildSoapEnvelope,
   parseSoapXml,
   serializeSoapParams,
+  toArray,
   xmlBooleanSchema,
   xmlIntSchema,
   type SoapParamValue,
@@ -63,10 +75,86 @@ const checkServiceUserResponseSchema = z.object({
   s_user_id: xmlIntSchema,
 });
 
+const idNameItemSchema = z.object({
+  ID: xmlIntSchema,
+  NAME: z.union([z.string(), z.number()]).transform((value) => String(value)),
+});
+
+const errorCodeXmlItemSchema = z.object({
+  ID: xmlIntSchema,
+  TEXT: z
+    .union([z.string(), z.number()])
+    .optional()
+    .default('')
+    .transform((value) => String(value)),
+  TYPE: z
+    .union([xmlIntSchema, z.literal('')])
+    .optional()
+    .transform((value) => (typeof value === 'number' ? value : 0)),
+});
+
+function xmlContainerSchema<T>(
+  containerTag: string,
+  itemTag: string,
+  itemSchema: z.ZodType<T>,
+) {
+  return z
+    .object({
+      [containerTag]: z.union([
+        z.literal(''),
+        z.null(),
+        z.undefined(),
+        z.object({
+          [itemTag]: z.union([itemSchema, z.array(itemSchema)]).optional(),
+        }),
+      ]),
+    })
+    .transform((result): T[] => {
+      const container = result[containerTag];
+      if (!container || typeof container !== 'object') {
+        return [];
+      }
+      return toArray(container[itemTag] as T | T[] | undefined);
+    });
+}
+
+const getWaybillTypesResponseSchema = z.object({
+  get_waybill_typesResult: xmlContainerSchema(
+    'WAYBILL_TYPES',
+    'WAYBILL_TYPE',
+    idNameItemSchema,
+  ),
+});
+
+const getWaybillUnitsResponseSchema = z.object({
+  get_waybill_unitsResult: xmlContainerSchema(
+    'WAYBILL_UNITS',
+    'WAYBILL_UNIT',
+    idNameItemSchema,
+  ),
+});
+
+const getTransTypesResponseSchema = z.object({
+  get_trans_typesResult: xmlContainerSchema(
+    'TRANSPORT_TYPES',
+    'TRANSPORT_TYPE',
+    idNameItemSchema,
+  ),
+});
+
+const getErrorCodesResponseSchema = z.object({
+  get_error_codesResult: z
+    .union([
+      xmlContainerSchema('ERROR_CODES', 'ERROR_CODE', errorCodeXmlItemSchema),
+      xmlContainerSchema('WAYBILL_TYPES', 'WAYBILL_TYPE', errorCodeXmlItemSchema),
+    ]),
+});
+
 export interface CreateSoapClientOptions {
   readonly config: RsgeConfig;
   readonly logger: RsgeLogger;
   readonly fetch?: typeof globalThis.fetch;
+  readonly getErrorCodesForTranslation?: () => Promise<readonly RsgeErrorCodeItem[]>;
 }
 
 export interface RsgeSoapClient {
@@ -75,12 +163,135 @@ export interface RsgeSoapClient {
     params: Record<string, SoapParamValue>,
     responseSchema: z.ZodType<T>,
   ): Promise<T>;
+  translateErrorCode(
+    code: number,
+    operation: string,
+    rawResult?: unknown,
+  ): Promise<RsgeApiError>;
   checkServiceUser(): Promise<CheckServiceUserResult>;
+  getWaybillTypes(): Promise<WaybillTypeItem[]>;
+  getWaybillUnits(): Promise<WaybillUnitItem[]>;
+  getTransportTypes(): Promise<TransportTypeItem[]>;
+  getErrorCodes(): Promise<RsgeErrorCodeItem[]>;
+}
+
+const NEGATIVE_INT_PATTERN = /^-\d+$/;
+
+function extractNegativeInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value < 0 ? value : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (NEGATIVE_INT_PATTERN.test(trimmed)) {
+      const parsed = Number.parseInt(trimmed, 10);
+      if (Number.isInteger(parsed) && parsed < 0) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function detectRsgeErrorCode(
+  operation: string,
+  operationResponse: unknown,
+): { readonly code: number; readonly rawResult: unknown } | undefined {
+  if (
+    operationResponse === null ||
+    typeof operationResponse !== 'object' ||
+    Array.isArray(operationResponse)
+  ) {
+    return undefined;
+  }
+
+  const record = operationResponse as Record<string, unknown>;
+  const resultValue = record[`${operation}Result`];
+
+  const scalarCode = extractNegativeInteger(resultValue);
+  if (scalarCode !== undefined) {
+    return { code: scalarCode, rawResult: resultValue };
+  }
+
+  if (
+    resultValue !== null &&
+    typeof resultValue === 'object' &&
+    !Array.isArray(resultValue)
+  ) {
+    const resultNode = (resultValue as Record<string, unknown>).RESULT;
+    if (
+      resultNode !== null &&
+      typeof resultNode === 'object' &&
+      !Array.isArray(resultNode)
+    ) {
+      const statusCode = extractNegativeInteger(
+        (resultNode as Record<string, unknown>).STATUS,
+      );
+      if (statusCode !== undefined) {
+        return { code: statusCode, rawResult: resultValue };
+      }
+    }
+  }
+
+  return undefined;
 }
 
 export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClient {
   const { config, logger } = options;
   const fetchFn = options.fetch ?? globalThis.fetch;
+  let internalErrorCodesCache: Promise<readonly RsgeErrorCodeItem[]> | undefined;
+
+  async function resolveErrorCodesCatalog(): Promise<
+    readonly RsgeErrorCodeItem[] | undefined
+  > {
+    try {
+      if (options.getErrorCodesForTranslation) {
+        return await options.getErrorCodesForTranslation();
+      }
+      if (internalErrorCodesCache === undefined) {
+        internalErrorCodesCache = getErrorCodes()
+          .then((items) => Object.freeze([...items]))
+          .catch((error: unknown) => {
+            internalErrorCodesCache = undefined;
+            throw error;
+          });
+      }
+      return await internalErrorCodesCache;
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      logger.warn('Failed to lazily load RS.ge error codes for translation', {
+        error: logger.redact(rawMessage),
+      });
+      return undefined;
+    }
+  }
+
+  async function translateErrorCode(
+    code: number,
+    operation: string,
+    rawResult?: unknown,
+  ): Promise<RsgeApiError> {
+    const catalog =
+      operation === 'get_error_codes'
+        ? undefined
+        : await resolveErrorCodesCatalog();
+
+    const translated = translateRsgeErrorCode(code, operation, catalog);
+    const safeTranslated = {
+      ...translated,
+      georgianText: logger.redact(translated.georgianText),
+      englishText: logger.redact(translated.englishText),
+      hint: logger.redact(translated.hint),
+    };
+
+    logger.warn('RS.ge returned negative error code', {
+      operation,
+      code,
+      knownCode: safeTranslated.knownCode,
+    });
+
+    return new RsgeApiError(safeTranslated, { rawResult });
+  }
 
   async function callOperation<T>(
     operation: string,
@@ -206,6 +417,15 @@ export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClie
       );
     }
 
+    const detectedError = detectRsgeErrorCode(operation, operationResponse);
+    if (detectedError !== undefined) {
+      throw await translateErrorCode(
+        detectedError.code,
+        operation,
+        detectedError.rawResult,
+      );
+    }
+
     const validated = responseSchema.safeParse(operationResponse);
     if (!validated.success) {
       logger.error('RS.ge SOAP response failed schema validation', {
@@ -236,8 +456,78 @@ export function createSoapClient(options: CreateSoapClientOptions): RsgeSoapClie
     };
   }
 
+  async function getWaybillTypes(): Promise<WaybillTypeItem[]> {
+    const parsed = await callOperation(
+      'get_waybill_types',
+      {},
+      getWaybillTypesResponseSchema,
+    );
+
+    return parsed.get_waybill_typesResult.map((item) => {
+      const englishName = WAYBILL_TYPE_ENGLISH_NAMES[item.ID];
+      return {
+        id: item.ID,
+        name: item.NAME,
+        ...(englishName !== undefined ? { englishName } : {}),
+      };
+    });
+  }
+
+  async function getWaybillUnits(): Promise<WaybillUnitItem[]> {
+    const parsed = await callOperation(
+      'get_waybill_units',
+      {},
+      getWaybillUnitsResponseSchema,
+    );
+
+    return parsed.get_waybill_unitsResult.map((item) => ({
+      id: item.ID,
+      name: item.NAME,
+    }));
+  }
+
+  async function getTransportTypes(): Promise<TransportTypeItem[]> {
+    const parsed = await callOperation(
+      'get_trans_types',
+      {},
+      getTransTypesResponseSchema,
+    );
+
+    return parsed.get_trans_typesResult.map((item) => {
+      const englishName = TRANSPORT_TYPE_ENGLISH_NAMES[item.ID];
+      return {
+        id: item.ID,
+        name: item.NAME,
+        ...(englishName !== undefined ? { englishName } : {}),
+      };
+    });
+  }
+
+  async function getErrorCodes(): Promise<RsgeErrorCodeItem[]> {
+    const parsed = await callOperation(
+      'get_error_codes',
+      {},
+      getErrorCodesResponseSchema,
+    );
+
+    return parsed.get_error_codesResult.map((item) => {
+      const englishText = getKnownEnglishErrorText(item.ID);
+      return {
+        code: item.ID,
+        text: item.TEXT,
+        type: item.TYPE,
+        ...(englishText !== undefined ? { englishText } : {}),
+      };
+    });
+  }
+
   return {
     callOperation,
+    translateErrorCode,
     checkServiceUser,
+    getWaybillTypes,
+    getWaybillUnits,
+    getTransportTypes,
+    getErrorCodes,
   };
 }

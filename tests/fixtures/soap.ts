@@ -48,3 +48,113 @@ export function xmlResponse(xml: string, status = 200): Response {
     headers: { 'content-type': 'text/xml; charset=utf-8' },
   });
 }
+
+export function waybillTypesXml(
+  items: ReadonlyArray<{ id: number; name: string }> = [
+    { id: 1, name: 'შიდა გადაზიდვა' },
+    { id: 2, name: 'ტრანსპორტირებით' },
+    { id: 3, name: 'ტრანსპორტირების გარეშე' },
+  ],
+): string {
+  const rows = items
+    .map(
+      (item) =>
+        `<WAYBILL_TYPE><ID>${item.id}</ID><NAME>${item.name}</NAME></WAYBILL_TYPE>`,
+    )
+    .join('');
+  return soapEnvelope(
+    `<get_waybill_typesResponse xmlns="http://tempuri.org/">` +
+      `<get_waybill_typesResult><WAYBILL_TYPES>${rows}</WAYBILL_TYPES></get_waybill_typesResult>` +
+      `</get_waybill_typesResponse>`,
+  );
+}
+
+export function waybillUnitsXml(
+  items: ReadonlyArray<{ id: number; name: string }> = [
+    { id: 1, name: 'ცალი' },
+    { id: 2, name: 'კგ' },
+    { id: 99, name: 'სხვა' },
+  ],
+): string {
+  const rows = items
+    .map(
+      (item) =>
+        `<WAYBILL_UNIT><ID>${item.id}</ID><NAME>${item.name}</NAME></WAYBILL_UNIT>`,
+    )
+    .join('');
+  return soapEnvelope(
+    `<get_waybill_unitsResponse xmlns="http://tempuri.org/">` +
+      `<get_waybill_unitsResult><WAYBILL_UNITS>${rows}</WAYBILL_UNITS></get_waybill_unitsResult>` +
+      `</get_waybill_unitsResponse>`,
+  );
+}
+
+export function transportTypesXml(
+  items: ReadonlyArray<{ id: number; name: string }> = [
+    { id: 1, name: 'საავტომობილო' },
+    { id: 2, name: 'სარკინიგზო' },
+    { id: 4, name: 'სხვა' },
+  ],
+): string {
+  const rows = items
+    .map(
+      (item) =>
+        `<TRANSPORT_TYPE><ID>${item.id}</ID><NAME>${item.name}</NAME></TRANSPORT_TYPE>`,
+    )
+    .join('');
+  return soapEnvelope(
+    `<get_trans_typesResponse xmlns="http://tempuri.org/">` +
+      `<get_trans_typesResult><TRANSPORT_TYPES>${rows}</TRANSPORT_TYPES></get_trans_typesResult>` +
+      `</get_trans_typesResponse>`,
+  );
+}
+
+export function errorCodesXml(
+  items: ReadonlyArray<{ id: number; text: string; type: number }> = [
+    {
+      id: -100,
+      text: 'სერვისის მომხმარებლის სახელი ან პაროლი არასწორია',
+      type: 1,
+    },
+    { id: -101, text: 'ზედნადები არ ეკუთვნის გადამხდელს', type: 1 },
+    { id: -1001, text: 'ზედნადების ტიპი არასწორია', type: 1 },
+    { id: -2004, text: 'მიუთითეთ ზომის ერთეულის დასახელება', type: 2 },
+  ],
+  variant: 'ERROR_CODES' | 'WAYBILL_TYPES' = 'ERROR_CODES',
+): string {
+  const container = variant === 'ERROR_CODES' ? 'ERROR_CODES' : 'WAYBILL_TYPES';
+  const itemTag = variant === 'ERROR_CODES' ? 'ERROR_CODE' : 'WAYBILL_TYPE';
+  const rows = items
+    .map(
+      (item) =>
+        `<${itemTag}><ID>${item.id}</ID><TEXT>${item.text}</TEXT><TYPE>${item.type}</TYPE></${itemTag}>`,
+    )
+    .join('');
+  return soapEnvelope(
+    `<get_error_codesResponse xmlns="http://tempuri.org/">` +
+      `<get_error_codesResult><${container}>${rows}</${container}></get_error_codesResult>` +
+      `</get_error_codesResponse>`,
+  );
+}
+
+export function rsgeResultStatusErrorXml(
+  operation: string,
+  statusCode: number,
+): string {
+  return soapEnvelope(
+    `<${operation}Response xmlns="http://tempuri.org/">` +
+      `<${operation}Result><RESULT xmlns=""><STATUS>${statusCode}</STATUS></RESULT></${operation}Result>` +
+      `</${operation}Response>`,
+  );
+}
+
+export function scalarOperationResultXml(
+  operation: string,
+  value: string | number,
+): string {
+  return soapEnvelope(
+    `<${operation}Response xmlns="http://tempuri.org/">` +
+      `<${operation}Result>${value}</${operation}Result>` +
+      `</${operation}Response>`,
+  );
+}

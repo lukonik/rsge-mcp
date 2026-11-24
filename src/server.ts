@@ -2,8 +2,11 @@ import { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import type { RsgeConfig } from './config.js';
 import type { ServerContext } from './context.js';
 import { createLogger, type LogLevel } from './logger.js';
+import { createReferenceDataStore } from './reference/index.js';
+import { registerReferenceResources } from './resources/reference.js';
 import { createSoapClient } from './soap/index.js';
 import { registerCheckConnectionTool } from './tools/check-connection.js';
+import { registerGetReferenceDataTool } from './tools/get-reference-data.js';
 
 export const SERVER_NAME = 'rsge-mcp';
 export const SERVER_VERSION = '0.1.0';
@@ -23,16 +26,24 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
     level: logLevel,
   });
 
+  let referenceData: ReturnType<typeof createReferenceDataStore>;
   const soapClient = createSoapClient({
     config: options.config,
     logger,
     fetch: options.fetch,
+    getErrorCodesForTranslation: () => referenceData.getErrorCodes(),
+  });
+
+  referenceData = createReferenceDataStore({
+    soapClient,
+    logger,
   });
 
   const context: ServerContext = {
     config: options.config,
     logger,
     soapClient,
+    referenceData,
   };
 
   const server = new FastMCP({
@@ -45,7 +56,9 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
     logLevel,
   });
 
+  registerReferenceResources(server, context);
   registerCheckConnectionTool(server, context);
+  registerGetReferenceDataTool(server, context);
 
   return server;
 }
