@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@prefecthq/fastmcp-ts@1.15.0'

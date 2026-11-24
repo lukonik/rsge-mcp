@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues and specs are tracked as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues and specs are tracked as GitHub issues in `lukonik/rsge-mcp` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

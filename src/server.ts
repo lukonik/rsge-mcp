@@ -1,0 +1,82 @@
+import { FastMCP } from '@prefecthq/fastmcp-ts/server';
+import type { RsgeConfig } from './config.js';
+import { createConfirmationTokenStore } from './confirmation/index.js';
+import type { ServerContext } from './context.js';
+import { createLogger, type LogLevel } from './logger.js';
+import { createReferenceDataStore } from './reference/index.js';
+import { registerReferenceResources } from './resources/reference.js';
+import { createSoapClient } from './soap/index.js';
+import { registerCheckConnectionTool } from './tools/check-connection.js';
+import { registerGetReferenceDataTool } from './tools/get-reference-data.js';
+import { registerGetWaybillTool } from './tools/get-waybill.js';
+import { registerListWaybillsTool } from './tools/list-waybills.js';
+import { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
+import { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
+import { registerBuyerActionTools } from './tools/buyer-actions.js';
+import { registerCreateWaybillInvoiceTool } from './tools/create-waybill-invoice.js';
+import { registerSellerLifecycleTools } from './tools/seller-lifecycle.js';
+
+export const SERVER_NAME = 'rsge-mcp';
+export const SERVER_VERSION = '0.1.0';
+
+export interface CreateRsgeServerOptions {
+  readonly config: RsgeConfig;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly logStream?: NodeJS.WritableStream;
+  readonly logLevel?: LogLevel;
+}
+
+export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
+  const logLevel = options.logLevel ?? 'info';
+  const logger = createLogger({
+    secrets: [options.config.serviceUser, options.config.servicePassword],
+    stream: options.logStream,
+    level: logLevel,
+  });
+
+  let referenceData: ReturnType<typeof createReferenceDataStore>;
+  const soapClient = createSoapClient({
+    config: options.config,
+    logger,
+    fetch: options.fetch,
+    getErrorCodesForTranslation: () => referenceData.getErrorCodes(),
+  });
+
+  referenceData = createReferenceDataStore({
+    soapClient,
+    logger,
+  });
+
+  const confirmationStore = createConfirmationTokenStore();
+
+  const context: ServerContext = {
+    config: options.config,
+    logger,
+    soapClient,
+    referenceData,
+    confirmationStore,
+  };
+
+  const server = new FastMCP({
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
+    instructions:
+      'RS.ge ელექტრონული ზედნადებების (WayBillService) MCP სერვერი. ' +
+      'Local MCP server for Revenue Service of Georgia (RS.ge) WayBillService.',
+    logger,
+    logLevel,
+  });
+
+  registerReferenceResources(server, context);
+  registerCheckConnectionTool(server, context);
+  registerGetReferenceDataTool(server, context);
+  registerLookupTaxpayerTool(server, context);
+  registerGetWaybillTool(server, context);
+  registerListWaybillsTool(server, context);
+  registerSaveWaybillDraftTool(server, context);
+  registerSellerLifecycleTools(server, context);
+  registerBuyerActionTools(server, context);
+  registerCreateWaybillInvoiceTool(server, context);
+
+  return server;
+}
