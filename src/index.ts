@@ -64,6 +64,29 @@ export { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
 export { registerGetWaybillTool } from './tools/get-waybill.js';
 export { registerListWaybillsTool } from './tools/list-waybills.js';
 export { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
+export { registerSellerLifecycleTools } from './tools/seller-lifecycle.js';
+export {
+  CONFIRMATION_TOKEN_ARG_KEY,
+  CONFIRMATION_TOKEN_TTL_MS,
+  canonicalizeConfirmationArgs,
+  computeCanonicalArgsHash,
+  confirmationTokenField,
+  createConfirmationTokenStore,
+  executeWaybillConfirmedAction,
+  formatConfirmationErrorResult,
+  waybillConfirmationInputSchema,
+  waybillIdConfirmationField,
+  type BilingualLegalEffect,
+  type ConfirmationRejectionReason,
+  type ConfirmationTokenStore,
+  type ConsumeConfirmationResult,
+  type CreateConfirmationTokenStoreOptions,
+  type IssuedConfirmationToken,
+  type WaybillConfirmationArgs,
+  type WaybillConfirmationPreviewResponse,
+  type WaybillConfirmedActionOptions,
+  type WaybillPreviewSummary,
+} from './confirmation/index.js';
 export {
   VAT_TYPE_LABELS,
   WAYBILL_CONFIRMATION_LABELS,

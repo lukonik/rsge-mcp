@@ -1,5 +1,6 @@
 import { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import type { RsgeConfig } from './config.js';
+import { createConfirmationTokenStore } from './confirmation/index.js';
 import type { ServerContext } from './context.js';
 import { createLogger, type LogLevel } from './logger.js';
 import { createReferenceDataStore } from './reference/index.js';
@@ -11,6 +12,7 @@ import { registerGetWaybillTool } from './tools/get-waybill.js';
 import { registerListWaybillsTool } from './tools/list-waybills.js';
 import { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
 import { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
+import { registerSellerLifecycleTools } from './tools/seller-lifecycle.js';
 
 export const SERVER_NAME = 'rsge-mcp';
 export const SERVER_VERSION = '0.1.0';
@@ -43,11 +45,14 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
     logger,
   });
 
+  const confirmationStore = createConfirmationTokenStore();
+
   const context: ServerContext = {
     config: options.config,
     logger,
     soapClient,
     referenceData,
+    confirmationStore,
   };
 
   const server = new FastMCP({
@@ -67,6 +72,7 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
   registerGetWaybillTool(server, context);
   registerListWaybillsTool(server, context);
   registerSaveWaybillDraftTool(server, context);
+  registerSellerLifecycleTools(server, context);
 
   return server;
 }
