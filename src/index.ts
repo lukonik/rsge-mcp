@@ -63,6 +63,7 @@ export { registerGetReferenceDataTool } from './tools/get-reference-data.js';
 export { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
 export { registerGetWaybillTool } from './tools/get-waybill.js';
 export { registerListWaybillsTool } from './tools/list-waybills.js';
+export { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
 export {
   VAT_TYPE_LABELS,
   WAYBILL_CONFIRMATION_LABELS,
@@ -88,6 +89,16 @@ export {
   type WaybillStatusInfo,
   type WaybillSummary,
 } from './waybill/index.js';
+export {
+  buildDraftWaybillXml,
+  draftLineItemInputSchema,
+  saveWaybillDraftInputSchema,
+  type BuiltDraftWaybill,
+  type ComputedDraftLineItem,
+  type DraftLineItemInput,
+  type SaveWaybillDraftInput,
+  type SellerIdentity,
+} from './waybill/draft-builder.js';
 export {
   NETWORK_FAILURE_HINT,
   formatSoapErrorResult,

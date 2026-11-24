@@ -10,6 +10,7 @@ import { registerGetReferenceDataTool } from './tools/get-reference-data.js';
 import { registerGetWaybillTool } from './tools/get-waybill.js';
 import { registerListWaybillsTool } from './tools/list-waybills.js';
 import { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
+import { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
 
 export const SERVER_NAME = 'rsge-mcp';
 export const SERVER_VERSION = '0.1.0';
@@ -65,6 +66,7 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
   registerLookupTaxpayerTool(server, context);
   registerGetWaybillTool(server, context);
   registerListWaybillsTool(server, context);
+  registerSaveWaybillDraftTool(server, context);
 
   return server;
 }
