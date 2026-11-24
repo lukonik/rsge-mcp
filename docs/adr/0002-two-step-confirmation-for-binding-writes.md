@@ -1,0 +1,3 @@
+# Two-step confirmation token for legally binding mutations
+
+RS.ge write transitions (`send_waybill`, `close_waybill`, `confirm_waybill`, `reject_waybill`, `ref_waybill`, `del_waybill`, `save_invoice`) carry real legal and tax consequences, and MCP clients vary in how strictly they enforce tool annotations. We enforce a server-side two-step confirmation flow on every legally binding write: the first call returns a Georgian/English summary of the exact action and a short-lived one-time confirmation token, and the actual SOAP mutation executes only when that token is passed back after user approval, alongside standard MCP `readOnlyHint`/`destructiveHint` annotations.

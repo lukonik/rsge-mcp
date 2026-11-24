@@ -1,0 +1,3 @@
+# Scope v1 to WayBillService core workflow only
+
+RS.ge exposes multiple SOAP services (`WayBillService`, `NtosService`, `TaxService`) and `WayBillService` alone has 50+ operations. For v1, we strictly target the core `WayBillService` workflow (connection check, counterparty TIN/VAT lookups, reference tables, waybill queries, core waybill lifecycle, and waybill-linked `save_invoice`) and explicitly exclude standalone `NtosService`, `TaxService`, service-user administration, templates, sub-waybills, and specialized timber/excise flows so the initial tool surface stays focused, safe, and easy for LLMs to use accurately.
