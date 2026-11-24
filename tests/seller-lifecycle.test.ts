@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { computeCanonicalArgsHash } from '../src/confirmation/index.js';
-import { DEFAULT_RSGE_ENDPOINT, loadConfig } from '../src/config.js';
-import { createRsgeServer } from '../src/server.js';
+import { DEFAULT_RSGE_ENDPOINT, createRsgeServer } from '../src/index.js';
+import { createTestConfig as createBaseTestConfig, parseToolJson } from './fixtures/mcp.js';
 import {
   errorCodesXml,
   scalarOperationResultXml,
@@ -11,19 +10,7 @@ import {
 import { getWaybillResponseXml, type WaybillFixture } from './fixtures/waybill.js';
 
 function createTestConfig() {
-  return loadConfig({
-    RSGE_SERVICE_USER: 'seller_user:206322102',
-    RSGE_SERVICE_PASSWORD: 'seller-secret-password',
-  });
-}
-
-function parseToolJson(result: {
-  content: ReadonlyArray<{ type: string; text?: string }>;
-}): Record<string, unknown> {
-  const first = result.content[0];
-  return JSON.parse(
-    first && first.type === 'text' && first.text ? first.text : '{}',
-  ) as Record<string, unknown>;
+  return createBaseTestConfig('seller_user:206322102', 'seller-secret-password');
 }
 
 const DRAFT_WAYBILL: WaybillFixture = {
@@ -707,24 +694,65 @@ describe('Two-step confirmation security guardrails', () => {
     }
   });
 
-  it('computes deterministic canonical hashes regardless of key ordering while excluding confirmation_token', () => {
-    const hashA = computeCanonicalArgsHash({
-      waybill_id: 1551,
-      nested: { b: 2, a: 1 },
-      confirmation_token: 'token-1',
-    });
-    const hashB = computeCanonicalArgsHash({
-      nested: { a: 1, b: 2, ignored: undefined },
-      waybill_id: 1551,
-      confirmation_token: 'token-2',
-    });
-    const hashDifferent = computeCanonicalArgsHash({
-      waybill_id: 1552,
-      nested: { a: 1, b: 2 },
+  it('binds confirmation tokens canonically regardless of JSON key order while excluding confirmation_token', async () => {
+    const capturedActions: Array<string | null> = [];
+    const fakeFetch: typeof globalThis.fetch = vi.fn(async (_input, init) => {
+      const soapAction = new Headers(init?.headers).get('soapaction');
+      capturedActions.push(soapAction);
+      if (soapAction === '"http://tempuri.org/get_waybill"') {
+        return xmlResponse(getWaybillResponseXml('get_waybill', DRAFT_WAYBILL));
+      }
+      if (soapAction === '"http://tempuri.org/send_waybill"') {
+        return xmlResponse(scalarOperationResultXml('send_waybill', '0000014722'));
+      }
+      throw new Error(`Unexpected SOAPAction: ${String(soapAction)}`);
     });
 
-    expect(hashA).toBe(hashB);
-    expect(hashA).not.toBe(hashDifferent);
+    const server = createRsgeServer({
+      config: createTestConfig(),
+      fetch: fakeFetch,
+      logLevel: 'silent',
+    });
+    const client = await Client.connect(server);
+
+    try {
+      // Issue token with { waybill_id: 1551 }
+      const preview = parseToolJson(
+        await client.callToolRaw('send_waybill', { waybill_id: 1551 }),
+      );
+      const token = preview.confirmation_token as string;
+
+      // Mismatched argument with reversed key order must still be rejected
+      const mismatched = await client.callToolRaw('send_waybill', {
+        confirmation_token: token,
+        waybill_id: 1552,
+      });
+      expect(mismatched.isError).toBe(true);
+      expect(parseToolJson(mismatched)).toMatchObject({
+        executed: false,
+        error: 'CONFIRMATION_TOKEN_ARGS_MISMATCH',
+      });
+
+      // Equivalent payload with confirmation_token placed BEFORE waybill_id must match and execute
+      const confirmed = await client.callToolRaw('send_waybill', {
+        confirmation_token: token,
+        waybill_id: 1551,
+      });
+      expect(confirmed.isError).toBeFalsy();
+      expect(parseToolJson(confirmed)).toMatchObject({
+        executed: true,
+        action: 'send_waybill',
+        waybillId: 1551,
+        waybillNumber: '0000014722',
+      });
+      expect(capturedActions).toEqual([
+        '"http://tempuri.org/get_waybill"',
+        '"http://tempuri.org/send_waybill"',
+      ]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('rejects invalid waybill_id and empty confirmation_token via Zod before calling RS.ge', async () => {

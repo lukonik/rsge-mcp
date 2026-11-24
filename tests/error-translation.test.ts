@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { createRsgeServer, loadConfig } from '../src/index.js';
+import { createRsgeServer } from '../src/index.js';
+import {
+  createTestConfig,
+  parseResourceJson,
+  parseToolJson,
+} from './fixtures/mcp.js';
 import {
   errorCodesXml,
   rsgeResultStatusErrorXml,
@@ -9,16 +14,6 @@ import {
   xmlResponse,
 } from './fixtures/soap.js';
 import { getWaybillResponseXml, type WaybillFixture } from './fixtures/waybill.js';
-
-function createTestConfig(
-  user = 'demo_user:206322102',
-  pass = 'demo-secret-password',
-) {
-  return loadConfig({
-    RSGE_SERVICE_USER: user,
-    RSGE_SERVICE_PASSWORD: pass,
-  });
-}
 
 describe('Automatic lazy RS.ge error-code translation', () => {
   it('lazily fetches and caches get_error_codes on negative RESULT.STATUS and reuses the cache for resources and later errors', async () => {
@@ -52,9 +47,7 @@ describe('Automatic lazy RS.ge error-code translation', () => {
       });
 
       expect(firstResult.isError).toBe(true);
-      const firstPayload = JSON.parse(
-        firstResult.content[0]?.type === 'text' ? firstResult.content[0].text : '{}',
-      ) as Record<string, unknown>;
+      const firstPayload = parseToolJson(firstResult);
 
       expect(firstPayload.error).toBe('RSGE_API_ERROR');
       expect(firstPayload.code).toBe(-1001);
@@ -71,11 +64,7 @@ describe('Automatic lazy RS.ge error-code translation', () => {
         category: 'units',
       });
       expect(secondResult.isError).toBe(true);
-      const secondPayload = JSON.parse(
-        secondResult.content[0]?.type === 'text'
-          ? secondResult.content[0].text
-          : '{}',
-      ) as Record<string, unknown>;
+      const secondPayload = parseToolJson(secondResult);
       expect(secondPayload.error).toBe('RSGE_API_ERROR');
       expect(secondPayload.code).toBe(-2004);
       expect(secondPayload.georgianText).toBe(
@@ -87,9 +76,9 @@ describe('Automatic lazy RS.ge error-code translation', () => {
       const resourceContents = await client.readResource(
         'rsge://reference/error-codes',
       );
-      const resourcePayload = JSON.parse(
-        'text' in resourceContents[0]! ? resourceContents[0]!.text : '{}',
-      ) as { count: number };
+      const resourcePayload = parseResourceJson<{ count: number }>(
+        resourceContents,
+      );
       expect(resourcePayload.count).toBe(4);
 
       expect(callsByAction.get('"http://tempuri.org/get_error_codes"')).toBe(1);
@@ -418,10 +407,8 @@ describe('Automatic lazy RS.ge error-code translation', () => {
       const closePreview = await client.callToolRaw('close_waybill', {
         waybill_id: 123,
       });
-      const closeToken = (
-        JSON.parse(
-          closePreview.content[0]?.type === 'text' ? closePreview.content[0].text : '{}',
-        ) as { confirmation_token: string }
+      const closeToken = parseToolJson<{ confirmation_token: string }>(
+        closePreview,
       ).confirmation_token;
 
       const closeRes = await client.callToolRaw('close_waybill', {
@@ -429,9 +416,7 @@ describe('Automatic lazy RS.ge error-code translation', () => {
         confirmation_token: closeToken,
       });
       expect(closeRes.isError).toBe(true);
-      const closePayload = JSON.parse(
-        closeRes.content[0]?.type === 'text' ? closeRes.content[0].text : '{}',
-      ) as Record<string, unknown>;
+      const closePayload = parseToolJson(closeRes);
       expect(closePayload).toMatchObject({
         error: 'RSGE_API_ERROR',
         code: -101,
@@ -443,10 +428,8 @@ describe('Automatic lazy RS.ge error-code translation', () => {
       const sendPreview = await client.callToolRaw('send_waybill', {
         waybill_id: 123,
       });
-      const sendToken = (
-        JSON.parse(
-          sendPreview.content[0]?.type === 'text' ? sendPreview.content[0].text : '{}',
-        ) as { confirmation_token: string }
+      const sendToken = parseToolJson<{ confirmation_token: string }>(
+        sendPreview,
       ).confirmation_token;
 
       const sendRes = await client.callToolRaw('send_waybill', {
@@ -454,9 +437,7 @@ describe('Automatic lazy RS.ge error-code translation', () => {
         confirmation_token: sendToken,
       });
       expect(sendRes.isError).toBe(true);
-      const sendPayload = JSON.parse(
-        sendRes.content[0]?.type === 'text' ? sendRes.content[0].text : '{}',
-      ) as Record<string, unknown>;
+      const sendPayload = parseToolJson(sendRes);
       expect(sendPayload).toMatchObject({
         error: 'RSGE_API_ERROR',
         code: -100,

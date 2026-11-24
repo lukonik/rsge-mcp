@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { DEFAULT_RSGE_ENDPOINT, loadConfig } from '../src/config.js';
-import { createRsgeServer } from '../src/server.js';
+import { DEFAULT_RSGE_ENDPOINT, createRsgeServer } from '../src/index.js';
+import { createTestConfig } from './fixtures/mcp.js';
 import {
   errorCodesXml,
   rsgeResultStatusErrorXml,
@@ -28,16 +28,6 @@ function isVatPayerTinXml(isVatPayer: boolean): string {
       `<is_vat_payer_tinResult>${isVatPayer ? 'true' : 'false'}</is_vat_payer_tinResult>` +
       `</is_vat_payer_tinResponse>`,
   );
-}
-
-function createTestConfig(
-  user = 'demo_user:206322102',
-  pass = 'demo-secret-password',
-) {
-  return loadConfig({
-    RSGE_SERVICE_USER: user,
-    RSGE_SERVICE_PASSWORD: pass,
-  });
 }
 
 describe('lookup_taxpayer tool via MCP protocol and stubbed fetch', () => {

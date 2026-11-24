@@ -1,3 +1,16 @@
+import { XMLParser } from 'fast-xml-parser';
+
+const testXmlParser = new XMLParser({
+  ignoreAttributes: true,
+  removeNSPrefix: true,
+  parseTagValue: false,
+  trimValues: true,
+});
+
+export function parseCapturedXml(xml: string): unknown {
+  return testXmlParser.parse(xml);
+}
+
 export function soapEnvelope(bodyXml: string): string {
   return (
     `<?xml version="1.0" encoding="utf-8"?>` +

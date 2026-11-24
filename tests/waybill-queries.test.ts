@@ -1,28 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { DEFAULT_RSGE_ENDPOINT, loadConfig } from '../src/config.js';
-import { createRsgeServer } from '../src/server.js';
+import { DEFAULT_RSGE_ENDPOINT, createRsgeServer } from '../src/index.js';
+import { createTestConfig, parseToolJson } from './fixtures/mcp.js';
 import { errorCodesXml, rsgeResultStatusErrorXml, soapEnvelope, xmlResponse } from './fixtures/soap.js';
 import {
   getWaybillResponseXml,
   getWaybillsListResponseXml,
   type WaybillFixture,
 } from './fixtures/waybill.js';
-
-function createTestConfig() {
-  return loadConfig({
-    RSGE_SERVICE_USER: 'demo_user:206322102',
-    RSGE_SERVICE_PASSWORD: 'demo-secret-password',
-  });
-}
-
-function parseToolJson(result: { content: ReadonlyArray<{ type: string; text?: string }> }) {
-  const first = result.content[0];
-  return JSON.parse(first && first.type === 'text' && first.text ? first.text : '{}') as Record<
-    string,
-    unknown
-  >;
-}
 
 const SAMPLE_MULTI_ITEM_WAYBILL: WaybillFixture = {
   id: 1551,

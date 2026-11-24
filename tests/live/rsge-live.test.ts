@@ -2,37 +2,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
 import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import {
-  REFERENCE_RESOURCE_URIS,
   createRsgeServer,
   loadConfig,
-  type ReferenceCategory,
   type RsgeConfig,
 } from '../../src/index.js';
+import { parseResourceJson, parseToolJson } from '../fixtures/mcp.js';
 
 const LIVE_TESTS_ENABLED = process.env.RSGE_LIVE_TESTS === '1';
 const DEFAULT_LIVE_TEST_TIN = '206322102';
 const LIVE_TIMEOUT_MS = 30_000;
 
-interface ToolCallRawResult {
-  readonly isError?: boolean;
-  readonly content: ReadonlyArray<{ readonly type: string; readonly text?: string }>;
-}
-
-function parseToolJson<T>(result: ToolCallRawResult): T {
-  const first = result.content[0];
-  expect(first?.type).toBe('text');
-  const text = first?.type === 'text' && typeof first.text === 'string' ? first.text : '';
-  return JSON.parse(text) as T;
-}
-
-function parseResourceJson<T>(
-  contents: ReadonlyArray<{ readonly uri: string; readonly mimeType?: string; readonly text?: string }>,
-): T {
-  const first = contents[0];
-  expect(first).toBeDefined();
-  const text = first && 'text' in first && typeof first.text === 'string' ? first.text : '';
-  return JSON.parse(text) as T;
-}
+const EXPECTED_REFERENCE_RESOURCES = [
+  { category: 'waybill_types', uri: 'rsge://reference/waybill-types' },
+  { category: 'units', uri: 'rsge://reference/units' },
+  { category: 'transport_types', uri: 'rsge://reference/transport-types' },
+  { category: 'error_codes', uri: 'rsge://reference/error-codes' },
+] as const;
 
 function formatDateYmd(date: Date): string {
   const yyyy = String(date.getFullYear());
@@ -107,15 +92,7 @@ describe.skipIf(!LIVE_TESTS_ENABLED)(
     it(
       'fetches live Reference Data via all four MCP Resources and get_reference_data tool',
       async () => {
-        const categories: readonly ReferenceCategory[] = [
-          'waybill_types',
-          'units',
-          'transport_types',
-          'error_codes',
-        ];
-
-        for (const category of categories) {
-          const uri = REFERENCE_RESOURCE_URIS[category];
+        for (const { category, uri } of EXPECTED_REFERENCE_RESOURCES) {
           const resourceContents = await client!.readResource(uri);
           expect(resourceContents).toHaveLength(1);
           expect(resourceContents[0]?.uri).toBe(uri);

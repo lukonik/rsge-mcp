@@ -6,6 +6,29 @@ import { Client, StdioTransport } from '@prefecthq/fastmcp-ts/client';
 
 const CLI_PATH = resolve(process.cwd(), 'dist/cli.js');
 
+const EXPECTED_V1_TOOLS = [
+  'check_connection',
+  'lookup_taxpayer',
+  'get_reference_data',
+  'get_waybill',
+  'list_waybills',
+  'save_waybill_draft',
+  'send_waybill',
+  'close_waybill',
+  'delete_waybill_draft',
+  'cancel_waybill',
+  'confirm_waybill',
+  'reject_waybill',
+  'create_waybill_invoice',
+] as const;
+
+const EXPECTED_REFERENCE_RESOURCES = [
+  'rsge://reference/waybill-types',
+  'rsge://reference/units',
+  'rsge://reference/transport-types',
+  'rsge://reference/error-codes',
+] as const;
+
 interface JsonRpcResponse {
   jsonrpc: string;
   id?: number | string;
@@ -20,7 +43,7 @@ describe('rsge-mcp CLI stdio smoke test', () => {
     expect(firstLine).toBe('#!/usr/bin/env node');
   });
 
-  it('speaks pure JSON-RPC on stdout, lists check_connection, and leaks zero credentials', async () => {
+  it('speaks pure JSON-RPC on stdout, lists all 13 spec tools and 4 reference resources, and leaks zero credentials', async () => {
     const secretUser = 'cli_smoke_user:206322102';
     const secretPass = 'cli-smoke-secret-password';
 
@@ -123,12 +146,36 @@ describe('rsge-mcp CLI stdio smoke test', () => {
         name: string;
         annotations?: { readOnlyHint?: boolean };
       }>;
+      expect(tools.map((t) => t.name).sort()).toEqual(
+        [...EXPECTED_V1_TOOLS].sort(),
+      );
       const checkConnection = tools.find((t) => t.name === 'check_connection');
       expect(checkConnection).toBeDefined();
       expect(checkConnection?.annotations?.readOnlyHint).toBe(true);
 
+      send({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'resources/list',
+        params: {},
+      });
+      const resourcesRes = await waitForMessageId(3);
+      expect(resourcesRes.jsonrpc).toBe('2.0');
+      expect(resourcesRes.error).toBeUndefined();
+
+      const resources = (resourcesRes.result?.resources ?? []) as Array<{
+        uri: string;
+        mimeType?: string;
+      }>;
+      expect(resources.map((r) => r.uri).sort()).toEqual(
+        [...EXPECTED_REFERENCE_RESOURCES].sort(),
+      );
+      for (const resource of resources) {
+        expect(resource.mimeType).toBe('application/json');
+      }
+
       // Every single stdout line must be a valid JSON-RPC 2.0 frame
-      expect(stdoutLines.length).toBeGreaterThanOrEqual(2);
+      expect(stdoutLines.length).toBeGreaterThanOrEqual(3);
       for (const line of stdoutLines) {
         const frame = JSON.parse(line) as JsonRpcResponse;
         expect(frame.jsonrpc).toBe('2.0');
@@ -146,7 +193,7 @@ describe('rsge-mcp CLI stdio smoke test', () => {
     }
   });
 
-  it('connects cleanly via FastMCP StdioTransport and lists check_connection', async () => {
+  it('connects cleanly via FastMCP StdioTransport and lists all 13 tools and 4 reference resources', async () => {
     const client = await Client.connect(
       new StdioTransport(process.execPath, [CLI_PATH], {
         env: {
@@ -159,9 +206,17 @@ describe('rsge-mcp CLI stdio smoke test', () => {
 
     try {
       const tools = await client.listTools();
+      expect(tools.map((t) => t.name).sort()).toEqual(
+        [...EXPECTED_V1_TOOLS].sort(),
+      );
       const checkConnection = tools.find((t) => t.name === 'check_connection');
       expect(checkConnection).toBeDefined();
       expect(checkConnection?.annotations?.readOnlyHint).toBe(true);
+
+      const resources = await client.listResources();
+      expect(resources.map((r) => r.uri).sort()).toEqual(
+        [...EXPECTED_REFERENCE_RESOURCES].sort(),
+      );
     } finally {
       await client.close();
     }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { DEFAULT_RSGE_ENDPOINT, loadConfig } from '../src/config.js';
-import { createRsgeServer } from '../src/server.js';
+import { DEFAULT_RSGE_ENDPOINT, createRsgeServer } from '../src/index.js';
+import { createTestConfig as createBaseTestConfig, parseToolJson } from './fixtures/mcp.js';
 import {
   errorCodesXml,
   rsgeResultStatusErrorXml,
@@ -12,19 +12,7 @@ import {
 import { getWaybillResponseXml, type WaybillFixture } from './fixtures/waybill.js';
 
 function createTestConfig() {
-  return loadConfig({
-    RSGE_SERVICE_USER: 'buyer_user:206322102',
-    RSGE_SERVICE_PASSWORD: 'buyer-secret-password',
-  });
-}
-
-function parseToolJson(result: {
-  content: ReadonlyArray<{ type: string; text?: string }>;
-}): Record<string, unknown> {
-  const first = result.content[0];
-  return JSON.parse(
-    first && first.type === 'text' && first.text ? first.text : '{}',
-  ) as Record<string, unknown>;
+  return createBaseTestConfig('buyer_user:206322102', 'buyer-secret-password');
 }
 
 const INCOMING_WAYBILL: WaybillFixture = {

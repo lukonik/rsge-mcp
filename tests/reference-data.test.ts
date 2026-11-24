@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { DEFAULT_RSGE_ENDPOINT, loadConfig } from '../src/config.js';
-import { createRsgeServer } from '../src/server.js';
+import { DEFAULT_RSGE_ENDPOINT, createRsgeServer } from '../src/index.js';
+import { createTestConfig } from './fixtures/mcp.js';
 import {
   errorCodesXml,
   transportTypesXml,
@@ -9,13 +9,6 @@ import {
   waybillUnitsXml,
   xmlResponse,
 } from './fixtures/soap.js';
-
-function createTestConfig() {
-  return loadConfig({
-    RSGE_SERVICE_USER: 'demo_user:206322102',
-    RSGE_SERVICE_PASSWORD: 'demo-secret-password',
-  });
-}
 
 describe('Reference Data MCP Resources', () => {
   it('registers all four Reference Data resources with Georgian-primary / English-secondary descriptions', async () => {

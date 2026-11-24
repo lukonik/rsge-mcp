@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@prefecthq/fastmcp-ts/client';
-import { DEFAULT_RSGE_ENDPOINT, loadConfig } from '../src/config.js';
-import { createRsgeServer } from '../src/server.js';
-import { parseSoapXml } from '../src/soap/xml.js';
+import { DEFAULT_RSGE_ENDPOINT, createRsgeServer } from '../src/index.js';
+import { createTestConfig, parseToolJson } from './fixtures/mcp.js';
 import {
   checkServiceUserInvalidXml,
   checkServiceUserSuccessXml,
   errorCodesXml,
+  parseCapturedXml,
   soapEnvelope,
   xmlResponse,
 } from './fixtures/soap.js';
@@ -49,16 +49,6 @@ function saveWaybillResultXml(options: {
       `</save_waybillResult>` +
       `</save_waybillResponse>`,
   );
-}
-
-function createTestConfig(
-  user = 'demo_user:206322102',
-  pass = 'demo-secret-password',
-) {
-  return loadConfig({
-    RSGE_SERVICE_USER: user,
-    RSGE_SERVICE_PASSWORD: pass,
-  });
 }
 
 describe('save_waybill_draft tool registration', () => {
@@ -402,7 +392,7 @@ describe('save_waybill_draft execution via MCP protocol and stubbed fetch', () =
       );
 
       // Verify the escaped SOAP envelope round-trips cleanly through XML parsing
-      const reparsed = parseSoapXml(capturedSaveBody) as {
+      const reparsed = parseCapturedXml(capturedSaveBody) as {
         Envelope: {
           Body: {
             save_waybill: {
@@ -847,9 +837,7 @@ describe('save_waybill_draft RS.ge error translation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const payload = JSON.parse(
-        result.content[0]?.type === 'text' ? result.content[0].text : '{}',
-      ) as Record<string, unknown>;
+      const payload = parseToolJson(result);
 
       expect(payload.error).toBe('RSGE_API_ERROR');
       expect(payload.code).toBe(-1001);
