@@ -39,3 +39,15 @@ _Avoid_: Bill, receipt, payment request
 **საქონლის პოზიცია (Line Item)**:
 ზედნადებში შეტანილი კონკრეტული საქონლის ჩანაწერი დასახელებით, ზომის ერთეულით, რაოდენობით, ერთეულის ფასითა და დღგ-ის ტიპით. A single goods entry on a Waybill specifying name, unit of measurement, quantity, unit price, and VAT type.
 _Avoid_: Product, SKU, cargo item, row
+
+**ზედნადების ტიპი (Waybill Type)**:
+RS.ge-ის საცნობარო კატეგორია, რომელიც განსაზღვრავს საქონლის მიწოდების ან გადაადგილების სახეს (მაგ., შიდა გადაზიდვა, ტრანსპორტირებით, ტრანსპორტირების გარეშე, დისტრიბუცია, უკან დაბრუნება). A reference category in RS.ge defining the kind of goods movement or supply.
+_Avoid_: Delivery mode, category
+
+**ტრანსპორტირების ტიპი (Transport Type)**:
+RS.ge-ის საცნობარო კატეგორია, რომელიც განსაზღვრავს გადაზიდვის საშუალებას (მაგ., საავტომობილო, სარკინიგზო, საჰაერო). A reference category in RS.ge specifying the mode of transport.
+_Avoid_: Shipping method, carrier type
+
+**საცნობარო მონაცემები (Reference Data)**:
+RS.ge-ის სისტემური ცნობარები — ზედნადების ტიპები, ზომის ერთეულები, ტრანსპორტირების ტიპები და შეცდომის კოდები. RS.ge's system lookup tables: waybill types, measurement units, transport types, and error codes.
+_Avoid_: Metadata, enums, static tables
