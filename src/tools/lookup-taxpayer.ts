@@ -2,20 +2,14 @@ import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import { z } from 'zod';
 import type { ServerContext } from '../context.js';
 import { xmlBooleanSchema } from '../soap/index.js';
+import { georgianTinSchema } from '../validation/common.js';
 import { formatSoapErrorResult } from './errors.js';
 
-const TIN_VALIDATION_MESSAGE =
-  'საიდენტიფიკაციო კოდი (TIN) უნდა იყოს 9-ნიშნა (იურიდიული პირი) ან 11-ნიშნა (ფიზიკური პირი) ციფრული სტრიქონი. ' +
-  'TIN must be a 9-digit (legal entity) or 11-digit (individual) numeric string.';
-
 const lookupTaxpayerInputSchema = z.object({
-  tin: z
-    .string({ error: TIN_VALIDATION_MESSAGE })
-    .regex(/^(?:\d{9}|\d{11})$/, { error: TIN_VALIDATION_MESSAGE })
-    .describe(
-      'გადასახადის გადამხდელის საიდენტიფიკაციო კოდი (TIN): 9-ნიშნა იურიდიული პირისთვის ან 11-ნიშნა ფიზიკური პირისთვის. ' +
-        'Taxpayer TIN: 9 digits for a legal entity or 11 digits for an individual.',
-    ),
+  tin: georgianTinSchema.describe(
+    'გადასახადის გადამხდელის საიდენტიფიკაციო კოდი (TIN): 9-ნიშნა იურიდიული პირისთვის ან 11-ნიშნა ფიზიკური პირისთვის. ' +
+      'Taxpayer TIN: 9 digits for a legal entity or 11 digits for an individual.',
+  ),
 });
 
 const getNameFromTinResponseSchema = z

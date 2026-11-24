@@ -1,4 +1,5 @@
 import type { RsgeSoapClient, SoapParamValue } from '../soap/index.js';
+import { normalizeDateBound } from '../validation/common.js';
 import {
   getBuyerWaybillsResponseSchema,
   getWaybillByNumberResponseSchema,
@@ -10,8 +11,6 @@ import type {
   ListWaybillsResult,
   Waybill,
 } from './types.js';
-
-const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function formatRsgeCommaList(values: readonly number[] | undefined): string {
   if (!values || values.length === 0) {
@@ -27,11 +26,7 @@ function toNullableRsgeDateTime(
   if (value === undefined) {
     return { nil: true };
   }
-  const trimmed = value.trim();
-  if (DATE_ONLY_PATTERN.test(trimmed)) {
-    return bound === 'start' ? `${trimmed}T00:00:00` : `${trimmed}T23:59:59`;
-  }
-  return trimmed;
+  return normalizeDateBound(value, bound);
 }
 
 export async function fetchWaybillById(

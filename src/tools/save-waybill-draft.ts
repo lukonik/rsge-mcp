@@ -11,7 +11,7 @@ import {
   saveWaybillDraftInputSchema,
   type SellerIdentity,
 } from '../waybill/draft-builder.js';
-import { formatSoapErrorResult } from './errors.js';
+import { formatSoapErrorResult, toolErrorResult } from './errors.js';
 
 const optionalXmlIntSchema = z
   .union([xmlIntSchema, z.literal('')])
@@ -209,6 +209,26 @@ export function registerSaveWaybillDraftTool(
 
         const isUpdate = args.waybillId > 0;
         const savedWaybillId = result.ID > 0 ? result.ID : args.waybillId;
+
+        if (savedWaybillId <= 0) {
+          return toolErrorResult(
+            {
+              executed: false,
+              action: 'save_waybill_draft',
+              operation: 'save_waybill',
+              waybillId: savedWaybillId,
+              error: 'RSGE_MUTATION_FAILED',
+              message:
+                'RS.ge-მ შენახული ზედნადების ID არ დააბრუნა (STATUS=0, ID<=0); შენახვის წარმატება ვერ დადასტურდა. ' +
+                'RS.ge did not return a valid saved Waybill ID (STATUS=0, ID<=0); Draft Waybill creation could not be confirmed.',
+              hint:
+                'შეამოწმეთ შენახული ზედნადებების სია list_waybills ინსტრუმენტით და გადაამოწმეთ ზედნადების სავალდებულო ველები. ' +
+                'Check existing Draft Waybills using list_waybills and verify all required Waybill fields.',
+            },
+            context.logger,
+          );
+        }
+
         const waybillNumber =
           result.WAYBILL_NUMBER.length > 0 ? result.WAYBILL_NUMBER : null;
 

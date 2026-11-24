@@ -1,77 +1,13 @@
 import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import { z } from 'zod';
 import type { ServerContext } from '../context.js';
+import {
+  isoDateOrDateTimeSchema,
+  normalizeDateBound,
+  trimmedGeorgianTinSchema,
+} from '../validation/common.js';
 import { listWaybills } from '../waybill/index.js';
 import { formatSoapErrorResult } from './errors.js';
-
-const ISO_DATE_OR_DATETIME_PATTERN =
-  /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2})?$/;
-
-const TIN_PATTERN = /^\d{9}$|^\d{11}$/;
-
-function isValidIsoDateOrDateTime(value: string): boolean {
-  const match =
-    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2}))?$/.exec(value);
-  if (!match) {
-    return false;
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = match[4] !== undefined ? Number(match[4]) : 0;
-  const minute = match[5] !== undefined ? Number(match[5]) : 0;
-  const second = match[6] !== undefined ? Number(match[6]) : 0;
-
-  if (
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31 ||
-    hour > 23 ||
-    minute > 59 ||
-    second > 59
-  ) {
-    return false;
-  }
-
-  const check = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  return (
-    check.getUTCFullYear() === year &&
-    check.getUTCMonth() === month - 1 &&
-    check.getUTCDate() === day
-  );
-}
-
-const isoDateOrDateTimeSchema = z
-  .string()
-  .trim()
-  .regex(
-    ISO_DATE_OR_DATETIME_PATTERN,
-    'თარიღის ფორმატი უნდა იყოს YYYY-MM-DD ან YYYY-MM-DDTHH:mm:ss. ' +
-      'Date must be formatted as YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss.',
-  )
-  .refine(
-    isValidIsoDateOrDateTime,
-    'მიუთითეთ ვალიდური კალენდარული თარიღი/დრო (YYYY-MM-DD ან YYYY-MM-DDTHH:mm:ss). ' +
-      'Provide a valid calendar date/time (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss).',
-  );
-
-const tinFilterSchema = z
-  .string()
-  .trim()
-  .regex(
-    TIN_PATTERN,
-    'საიდენტიფიკაციო კოდი (TIN) უნდა შედგებოდეს 9 (იურიდიული პირი) ან 11 (ფიზიკური პირი) ციფრისგან. ' +
-      'TIN must be 9 digits (legal entity) or 11 digits (individual).',
-  );
-
-function normalizeDateBound(value: string, bound: 'start' | 'end'): string {
-  return value.length === 10
-    ? bound === 'start'
-      ? `${value}T00:00:00`
-      : `${value}T23:59:59`
-    : value;
-}
 
 const listWaybillsInputSchema = z
   .object({
@@ -103,7 +39,7 @@ const listWaybillsInputSchema = z
           '8=გადამზიდავთან გადაგზავნილი (Sent to Transporter), -1=წაშლილი (Deleted), -2=გაუქმებული (Cancelled). ' +
           'Filter by Waybill Status codes.',
       ),
-    counterparty_tin: tinFilterSchema
+    counterparty_tin: trimmedGeorgianTinSchema
       .optional()
       .describe(
         'კონტრაგენტის საიდენტიფიკაციო კოდი (TIN): outgoing-ისთვის მყიდველის TIN (buyer_tin), incoming-ისთვის გამყიდველის TIN (seller_tin). ' +
@@ -171,7 +107,7 @@ const listWaybillsInputSchema = z
         'ავტომობილის სახელმწიფო ნომრის ფილტრი (მაგ., "AA123BB"). ' +
           'Filter by vehicle plate number.',
       ),
-    driver_tin: tinFilterSchema
+    driver_tin: trimmedGeorgianTinSchema
       .optional()
       .describe(
         'მძღოლის საიდენტიფიკაციო კოდის (TIN) ფილტრი. Filter by driver TIN.',

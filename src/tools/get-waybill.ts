@@ -1,19 +1,13 @@
 import type { FastMCP } from '@prefecthq/fastmcp-ts/server';
 import { z } from 'zod';
 import type { ServerContext } from '../context.js';
+import { waybillIdSchema } from '../validation/common.js';
 import { fetchWaybillById, fetchWaybillByNumber } from '../waybill/index.js';
 import { formatSoapErrorResult, toolErrorResult } from './errors.js';
 
 const getWaybillInputSchema = z
   .object({
-    waybill_id: z
-      .number()
-      .int(
-        'ზედნადების ID (waybill_id) უნდა იყოს მთელი რიცხვი. waybill_id must be an integer.',
-      )
-      .positive(
-        'ზედნადების ID (waybill_id) უნდა იყოს დადებითი მთელი რიცხვი. waybill_id must be a positive integer.',
-      )
+    waybill_id: waybillIdSchema
       .optional()
       .describe(
         'RS.ge ზედნადების რიცხვითი ID (მაგ., 1551). არ მიუთითოთ waybill_number-თან ერთად. ' +

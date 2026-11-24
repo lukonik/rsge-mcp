@@ -1,149 +1,20 @@
 import { z } from 'zod';
 import { escapeXml } from '../soap/xml.js';
-
-const ISO_LOCAL_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
-const GEORGIAN_BUYER_TIN_PATTERN = /^\d{9}$|^\d{11}$/;
-const GEORGIAN_DRIVER_TIN_PATTERN = /^\d{11}$/;
-const DECIMAL_STRING_PATTERN = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
-
-export interface ExactDecimal {
-  readonly unscaled: bigint;
-  readonly scale: number;
-}
-
-export function parseDecimal(value: number | string): ExactDecimal {
-  const raw = typeof value === 'number' ? String(value) : value.trim();
-  const match = DECIMAL_STRING_PATTERN.exec(raw);
-  if (!match) {
-    throw new Error(`Invalid decimal value: "${raw}"`);
-  }
-
-  const sign = match[1] === '-' ? -1n : 1n;
-  const intPart = match[2]!;
-  const fracPart = match[3] ?? '';
-  const exponent = match[4] !== undefined ? Number.parseInt(match[4], 10) : 0;
-
-  const combinedDigits = `${intPart}${fracPart}`;
-  const rawScale = fracPart.length - exponent;
-
-  if (rawScale < 0) {
-    const scaleFactor = 10n ** BigInt(-rawScale);
-    return {
-      unscaled: sign * BigInt(combinedDigits) * scaleFactor,
-      scale: 0,
-    };
-  }
-
-  return {
-    unscaled: sign * BigInt(combinedDigits),
-    scale: rawScale,
-  };
-}
-
-export function multiplyDecimals(
-  left: ExactDecimal,
-  right: ExactDecimal,
-): ExactDecimal {
-  return {
-    unscaled: left.unscaled * right.unscaled,
-    scale: left.scale + right.scale,
-  };
-}
-
-export function roundDecimalHalfAwayFromZero(
-  decimal: ExactDecimal,
-  targetScale: number,
-): ExactDecimal {
-  if (decimal.scale === targetScale) {
-    return decimal;
-  }
-
-  if (decimal.scale < targetScale) {
-    const factor = 10n ** BigInt(targetScale - decimal.scale);
-    return {
-      unscaled: decimal.unscaled * factor,
-      scale: targetScale,
-    };
-  }
-
-  const diff = decimal.scale - targetScale;
-  const factor = 10n ** BigInt(diff);
-  const isNegative = decimal.unscaled < 0n;
-  const absUnscaled = isNegative ? -decimal.unscaled : decimal.unscaled;
-  const quotient = absUnscaled / factor;
-  const remainder = absUnscaled % factor;
-  const half = factor / 2n;
-  const roundedAbs = remainder >= half ? quotient + 1n : quotient;
-
-  return {
-    unscaled: isNegative ? -roundedAbs : roundedAbs,
-    scale: targetScale,
-  };
-}
-
-export function addSameScaleDecimals(
-  left: ExactDecimal,
-  right: ExactDecimal,
-): ExactDecimal {
-  const maxScale = Math.max(left.scale, right.scale);
-  const leftScaled =
-    left.scale === maxScale
-      ? left.unscaled
-      : left.unscaled * 10n ** BigInt(maxScale - left.scale);
-  const rightScaled =
-    right.scale === maxScale
-      ? right.unscaled
-      : right.unscaled * 10n ** BigInt(maxScale - right.scale);
-
-  return {
-    unscaled: leftScaled + rightScaled,
-    scale: maxScale,
-  };
-}
-
-export function formatDecimal(decimal: ExactDecimal): string {
-  const isNegative = decimal.unscaled < 0n;
-  const absDigits = (isNegative ? -decimal.unscaled : decimal.unscaled).toString();
-
-  if (decimal.scale === 0) {
-    return `${isNegative ? '-' : ''}${absDigits}`;
-  }
-
-  const padded = absDigits.padStart(decimal.scale + 1, '0');
-  const intPart = padded.slice(0, padded.length - decimal.scale);
-  const fracPart = padded.slice(padded.length - decimal.scale);
-  return `${isNegative ? '-' : ''}${intPart}.${fracPart}`;
-}
-
-export function formatDecimalTrimmed(decimal: ExactDecimal): string {
-  if (decimal.unscaled === 0n) {
-    return '0';
-  }
-  const formatted = formatDecimal(decimal);
-  if (!formatted.includes('.')) {
-    return formatted;
-  }
-  return formatted.replace(/0+$/, '').replace(/\.$/, '');
-}
-
-export function formatDecimalMinScale(
-  decimal: ExactDecimal,
-  minScale: number,
-): string {
-  const trimmed = formatDecimalTrimmed(decimal);
-  if (minScale <= 0) {
-    return trimmed;
-  }
-  const dotIndex = trimmed.indexOf('.');
-  if (dotIndex === -1) {
-    return `${trimmed}.${'0'.repeat(minScale)}`;
-  }
-  const existingDecimals = trimmed.length - dotIndex - 1;
-  if (existingDecimals >= minScale) {
-    return trimmed;
-  }
-  return `${trimmed}${'0'.repeat(minScale - existingDecimals)}`;
-}
+import {
+  GEORGIAN_DRIVER_TIN_PATTERN,
+  GEORGIAN_TIN_PATTERN,
+  createIsoLocalDateTimeSchema,
+} from '../validation/common.js';
+import {
+  addSameScaleDecimals,
+  formatDecimal,
+  formatDecimalMinScale,
+  formatDecimalTrimmed,
+  multiplyDecimals,
+  parseDecimal,
+  roundDecimalHalfAwayFromZero,
+  type ExactDecimal,
+} from './decimal.js';
 
 export const draftLineItemInputSchema = z
   .object({
@@ -249,10 +120,10 @@ export const saveWaybillDraftInputSchema = z
       .number()
       .int()
       .min(1)
-      .max(6)
+      .max(5)
       .describe(
-        'ზედნადების ტიპი RS.ge ცნობარიდან: 1=შიდა გადაზიდვა, 2=ტრანსპორტირებით, 3=ტრანსპორტირების გარეშე, 4=დისტრიბუცია, 5=უკან დაბრუნება. ' +
-          'Waybill Type ID from Reference Data: 1=Internal Transfer, 2=Delivery with Transportation, 3=Delivery without Transportation, 4=Distribution, 5=Return.',
+        'ზედნადების ტიპი RS.ge ცნობარიდან: 1=შიდა გადაზიდვა, 2=ტრანსპორტირებით, 3=ტრანსპორტირების გარეშე, 4=დისტრიბუცია, 5=უკან დაბრუნება (ქვე-ზედნადები v1-ში არ არის მხარდაჭერილი). ' +
+          'Waybill Type ID from Reference Data: 1=Internal Transfer, 2=Delivery with Transportation, 3=Delivery without Transportation, 4=Distribution, 5=Return (Sub-waybill Type 6 is out of scope in v1).',
       ),
     buyerTin: z
       .string()
@@ -260,7 +131,7 @@ export const saveWaybillDraftInputSchema = z
       .optional()
       .describe(
         'მყიდველის საიდენტიფიკაციო კოდი (9-ნიშნა იურიდიული პირისთვის, 11-ნიშნა ფიზიკური პირისთვის). ' +
-          'Buyer TIN (9 digits for legal entities, 11 digits for individuals; omit for Internal Transfer).',
+          'Buyer TIN (9 digits for legal entities, 11 digits for individuals; required for Types 2, 3, 5; omit for Type 1 Internal Transfer).',
       ),
     buyerName: z
       .string()
@@ -280,14 +151,16 @@ export const saveWaybillDraftInputSchema = z
       .trim()
       .optional()
       .describe(
-        'ტრანსპორტირების დაწყების მისამართი. Transport start address.',
+        'ტრანსპორტირების დაწყების მისამართი (სავალდებულოა 1 და 2 ტიპის ზედნადებებისთვის). ' +
+          'Transport start address (required for Waybill Types 1 and 2).',
       ),
     endAddress: z
       .string()
       .trim()
       .optional()
       .describe(
-        'ტრანსპორტირების დასრულების მისამართი. Transport destination address.',
+        'ტრანსპორტირების დასრულების მისამართი (სავალდებულოა 1 და 2 ტიპის ზედნადებებისთვის). ' +
+          'Transport destination address (required for Waybill Types 1 and 2).',
       ),
     driverTin: z
       .string()
@@ -321,11 +194,12 @@ export const saveWaybillDraftInputSchema = z
     transportTypeId: z
       .number()
       .int()
-      .nonnegative()
+      .min(0)
+      .max(7)
       .optional()
       .describe(
-        'ტრანსპორტირების ტიპის ID (მაგ. 1=საავტომობილო, 4=სხვა, 0=ტრანსპორტირების გარეშე). ' +
-          'Transport Type ID from Reference Data (defaults to 0 for Type 3, 1 otherwise).',
+        'ტრანსპორტირების ტიპის ID (1..7 ტრანსპორტირებით ზედნადებებისთვის, მაგ. 1=საავტომობილო, 4=სხვა; 0 მხოლოდ 3 ტიპისთვის ტრანსპორტირების გარეშე). ' +
+          'Transport Type ID from Reference Data (1..7 for transport Waybill Types; 0 only for Type 3 without transport; defaults to 0 for Type 3, 1 otherwise).',
       ),
     transportText: z
       .string()
@@ -351,25 +225,13 @@ export const saveWaybillDraftInputSchema = z
         'ტრანსპორტირების ხარჯის გადამხდელი: 1=მყიდველი, 2=გამყიდველი. ' +
           'Transport cost payer: 1=Buyer, 2=Seller.',
       ),
-    beginDate: z
-      .string()
-      .trim()
-      .regex(
-        ISO_LOCAL_DATETIME_PATTERN,
-        'beginDate უნდა იყოს yyyy-MM-ddTHH:mm:ss ფორმატში / beginDate must match yyyy-MM-ddTHH:mm:ss',
-      )
+    beginDate: createIsoLocalDateTimeSchema('beginDate')
       .optional()
       .describe(
         'ტრანსპორტირების დაწყების თარიღი (yyyy-MM-ddTHH:mm:ss). ' +
           'Transport begin date-time in local ISO format (yyyy-MM-ddTHH:mm:ss).',
       ),
-    deliveryDate: z
-      .string()
-      .trim()
-      .regex(
-        ISO_LOCAL_DATETIME_PATTERN,
-        'deliveryDate უნდა იყოს yyyy-MM-ddTHH:mm:ss ფორმატში / deliveryDate must match yyyy-MM-ddTHH:mm:ss',
-      )
+    deliveryDate: createIsoLocalDateTimeSchema('deliveryDate')
       .optional()
       .describe(
         'მიწოდების თარიღი (yyyy-MM-ddTHH:mm:ss). ' +
@@ -413,11 +275,38 @@ export const saveWaybillDraftInputSchema = z
       });
     }
 
+    const hasBuyerTin =
+      input.buyerTin !== undefined && input.buyerTin.length > 0;
+
+    if (
+      (input.waybillType === 2 ||
+        input.waybillType === 3 ||
+        input.waybillType === 5) &&
+      !hasBuyerTin
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['buyerTin'],
+        message:
+          'მყიდველის საიდენტიფიკაციო კოდი (buyerTin) სავალდებულოა 2, 3 და 5 ტიპის ზედნადებებისთვის. ' +
+          'buyerTin is required for Waybill Types 2, 3, and 5.',
+      });
+    }
+
+    if (input.waybillType === 1 && hasBuyerTin) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['buyerTin'],
+        message:
+          'შიდა გადაზიდვის ზედნადებში (waybillType=1) მყიდველის საიდენტიფიკაციო კოდი (buyerTin) არ უნდა მიეთითოს. ' +
+          'buyerTin must be omitted for Internal Transfer (waybillType=1) Waybills.',
+      });
+    }
+
     if (
       input.buyerIsGeorgian &&
-      input.buyerTin !== undefined &&
-      input.buyerTin.length > 0 &&
-      !GEORGIAN_BUYER_TIN_PATTERN.test(input.buyerTin)
+      hasBuyerTin &&
+      !GEORGIAN_TIN_PATTERN.test(input.buyerTin!)
     ) {
       ctx.addIssue({
         code: 'custom',
@@ -426,6 +315,27 @@ export const saveWaybillDraftInputSchema = z
           'ქართველი მყიდველის საიდენტიფიკაციო კოდი (TIN) უნდა იყოს 9 ან 11 ციფრი. ' +
           'Georgian Buyer TIN must be 9 digits (legal entity) or 11 digits (individual).',
       });
+    }
+
+    if (input.waybillType === 1 || input.waybillType === 2) {
+      if (!input.startAddress || input.startAddress.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['startAddress'],
+          message:
+            'ტრანსპორტირების დაწყების მისამართი (startAddress) სავალდებულოა 1 და 2 ტიპის ზედნადებებისთვის. ' +
+            'startAddress is required for Waybill Types 1 and 2.',
+        });
+      }
+      if (!input.endAddress || input.endAddress.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['endAddress'],
+          message:
+            'ტრანსპორტირების დასრულების მისამართი (endAddress) სავალდებულოა 1 და 2 ტიპის ზედნადებებისთვის. ' +
+            'endAddress is required for Waybill Types 1 and 2.',
+        });
+      }
     }
 
     if (
@@ -440,6 +350,30 @@ export const saveWaybillDraftInputSchema = z
         message:
           'საქართველოს მოქალაქე მძღოლის საიდენტიფიკაციო კოდი უნდა იყოს 11 ციფრი. ' +
           'Georgian Driver TIN must be 11 digits.',
+      });
+    }
+
+    if (input.waybillType !== 3 && input.transportTypeId === 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['transportTypeId'],
+        message:
+          'transportTypeId=0 დასაშვებია მხოლოდ ტრანსპორტირების გარეშე ზედნადებისთვის (waybillType=3); სხვა ტიპებისთვის მიუთითეთ 1..7. ' +
+          'transportTypeId=0 is only valid for Delivery without Transportation (waybillType=3); provide 1..7 for transport Waybill Types.',
+      });
+    }
+
+    if (
+      input.waybillType === 3 &&
+      input.transportTypeId !== undefined &&
+      input.transportTypeId !== 0
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['transportTypeId'],
+        message:
+          'ტრანსპორტირების გარეშე ზედნადებისთვის (waybillType=3) transportTypeId უნდა იყოს 0 ან გამოტოვებული. ' +
+          'For Delivery without Transportation (waybillType=3), transportTypeId must be 0 or omitted.',
       });
     }
 

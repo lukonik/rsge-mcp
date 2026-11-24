@@ -562,6 +562,20 @@ describe('save_waybill_draft execution via MCP protocol and stubbed fetch', () =
     const client = await Client.connect(server);
 
     try {
+      // Type 1: Internal Transfer (no buyerTin, requires startAddress & endAddress)
+      const type1 = await client.callToolRaw('save_waybill_draft', {
+        waybillType: 1,
+        startAddress: 'თბილისი, საწყობი 1',
+        endAddress: 'თბილისი, ფილიალი 2',
+        lineItems: [{ name: 'შიდა გადაზიდვის ტვირთი', unitId: 1, quantity: 3, unitPrice: 10 }],
+      });
+      expect(type1.isError).toBeFalsy();
+      expect(saveBodies[0]).toContain('<TYPE>1</TYPE>');
+      expect(saveBodies[0]).toContain('<BUYER_TIN></BUYER_TIN>');
+      expect(saveBodies[0]).toContain('<START_ADDRESS>თბილისი, საწყობი 1</START_ADDRESS>');
+      expect(saveBodies[0]).toContain('<END_ADDRESS>თბილისი, ფილიალი 2</END_ADDRESS>');
+      expect(saveBodies[0]).toContain('<TRANS_ID>1</TRANS_ID>');
+
       // Type 3: without transport -> TRANS_ID defaults to 0, TRANSPORT_COAST = 0, TRAN_COST_PAYER = ""
       const type3 = await client.callToolRaw('save_waybill_draft', {
         waybillType: 3,
@@ -569,16 +583,18 @@ describe('save_waybill_draft execution via MCP protocol and stubbed fetch', () =
         lineItems: [{ name: 'კონსულტაციის მასალა', unitId: 1, quantity: 1, unitPrice: 100 }],
       });
       expect(type3.isError).toBeFalsy();
-      expect(saveBodies[0]).toContain('<TYPE>3</TYPE>');
-      expect(saveBodies[0]).toContain('<TRANSPORT_COAST>0</TRANSPORT_COAST>');
-      expect(saveBodies[0]).toContain('<TRAN_COST_PAYER></TRAN_COST_PAYER>');
-      expect(saveBodies[0]).toContain('<TRANS_ID>0</TRANS_ID>');
+      expect(saveBodies[1]).toContain('<TYPE>3</TYPE>');
+      expect(saveBodies[1]).toContain('<TRANSPORT_COAST>0</TRANSPORT_COAST>');
+      expect(saveBodies[1]).toContain('<TRAN_COST_PAYER></TRAN_COST_PAYER>');
+      expect(saveBodies[1]).toContain('<TRANS_ID>0</TRANS_ID>');
 
       // Foreign Buyer + foreign Driver + custom Transport Type 4
       const foreign = await client.callToolRaw('save_waybill_draft', {
         waybillType: 2,
         buyerTin: 'DE123456789',
         buyerIsGeorgian: false,
+        startAddress: 'თბილისი',
+        endAddress: 'ბათუმი',
         driverTin: 'PASS98765',
         driverIsGeorgian: false,
         transportTypeId: 4,
@@ -587,11 +603,11 @@ describe('save_waybill_draft execution via MCP protocol and stubbed fetch', () =
         lineItems: [{ name: 'საექსპორტო ტვირთი', unitId: 1, quantity: 2, unitPrice: 50, vatType: 1 }],
       });
       expect(foreign.isError).toBeFalsy();
-      expect(saveBodies[1]).toContain('<BUYER_TIN>DE123456789</BUYER_TIN><CHEK_BUYER_TIN>0</CHEK_BUYER_TIN>');
-      expect(saveBodies[1]).toContain('<DRIVER_TIN>PASS98765</DRIVER_TIN><CHEK_DRIVER_TIN>0</CHEK_DRIVER_TIN>');
-      expect(saveBodies[1]).toContain('<TRAN_COST_PAYER>1</TRAN_COST_PAYER>');
-      expect(saveBodies[1]).toContain('<TRANS_ID>4</TRANS_ID><TRANS_TXT>საზღვაო კონტეინერი</TRANS_TXT>');
-      expect(saveBodies[1]).toContain('<VAT_TYPE>1</VAT_TYPE>');
+      expect(saveBodies[2]).toContain('<BUYER_TIN>DE123456789</BUYER_TIN><CHEK_BUYER_TIN>0</CHEK_BUYER_TIN>');
+      expect(saveBodies[2]).toContain('<DRIVER_TIN>PASS98765</DRIVER_TIN><CHEK_DRIVER_TIN>0</CHEK_DRIVER_TIN>');
+      expect(saveBodies[2]).toContain('<TRAN_COST_PAYER>1</TRAN_COST_PAYER>');
+      expect(saveBodies[2]).toContain('<TRANS_ID>4</TRANS_ID><TRANS_TXT>საზღვაო კონტეინერი</TRANS_TXT>');
+      expect(saveBodies[2]).toContain('<VAT_TYPE>1</VAT_TYPE>');
     } finally {
       await client.close();
       await server.close();
@@ -612,6 +628,8 @@ describe('save_waybill_draft Zod validation failures', () => {
     const validBase = {
       waybillType: 2,
       buyerTin: '206322102',
+      startAddress: 'თბილისი, რუსთაველის 1',
+      endAddress: 'ბათუმი, ჭავჭავაძის 5',
       lineItems: [{ name: 'ტესტი', unitId: 1, quantity: 1, unitPrice: 10 }],
     };
 
@@ -621,10 +639,96 @@ describe('save_waybill_draft Zod validation failures', () => {
         client.callToolRaw('save_waybill_draft', { ...validBase, lineItems: [] }),
       ).rejects.toThrow();
 
+      // Out-of-scope Sub-waybill (waybillType: 6) per ADR-0001
+      await expect(
+        client.callToolRaw('save_waybill_draft', { ...validBase, waybillType: 6 }),
+      ).rejects.toThrow();
+
       // Invalid waybillType
       await expect(
         client.callToolRaw('save_waybill_draft', { ...validBase, waybillType: 9 }),
       ).rejects.toThrow();
+
+      // Invalid transportTypeId (999 or out of 1..7)
+      await expect(
+        client.callToolRaw('save_waybill_draft', { ...validBase, transportTypeId: 999 }),
+      ).rejects.toThrow();
+
+      await expect(
+        client.callToolRaw('save_waybill_draft', { ...validBase, transportTypeId: 8 }),
+      ).rejects.toThrow();
+
+      // transportTypeId: 0 is rejected on transport Waybill Types (1, 2, 4, 5)
+      for (const transportWaybillType of [1, 2, 4, 5]) {
+        const baseForType =
+          transportWaybillType === 1
+            ? {
+                waybillType: 1,
+                startAddress: validBase.startAddress,
+                endAddress: validBase.endAddress,
+                lineItems: validBase.lineItems,
+              }
+            : { ...validBase, waybillType: transportWaybillType };
+        await expect(
+          client.callToolRaw('save_waybill_draft', {
+            ...baseForType,
+            transportTypeId: 0,
+          }),
+        ).rejects.toThrow();
+      }
+
+      // Non-zero transportTypeId is rejected on Type 3 (without transport)
+      await expect(
+        client.callToolRaw('save_waybill_draft', {
+          waybillType: 3,
+          buyerTin: '206322102',
+          transportTypeId: 1,
+          lineItems: validBase.lineItems,
+        }),
+      ).rejects.toThrow();
+
+      // Missing buyerTin on Waybill Types 2, 3, 5
+      for (const buyerRequiredType of [2, 3, 5]) {
+        const { buyerTin: _omitted, ...withoutBuyerTin } = validBase;
+        await expect(
+          client.callToolRaw('save_waybill_draft', {
+            ...withoutBuyerTin,
+            waybillType: buyerRequiredType,
+          }),
+        ).rejects.toThrow();
+      }
+
+      // Disallowed buyerTin on Type 1 (Internal Transfer)
+      await expect(
+        client.callToolRaw('save_waybill_draft', {
+          ...validBase,
+          waybillType: 1,
+          buyerTin: '206322102',
+        }),
+      ).rejects.toThrow();
+
+      // Missing startAddress or endAddress on transport Waybill Types 1 and 2
+      for (const addressRequiredType of [1, 2]) {
+        const typeBase =
+          addressRequiredType === 1
+            ? {
+                waybillType: 1,
+                startAddress: validBase.startAddress,
+                endAddress: validBase.endAddress,
+                lineItems: validBase.lineItems,
+              }
+            : validBase;
+
+        const { startAddress: _noStart, ...missingStart } = typeBase;
+        await expect(
+          client.callToolRaw('save_waybill_draft', missingStart),
+        ).rejects.toThrow();
+
+        const { endAddress: _noEnd, ...missingEnd } = typeBase;
+        await expect(
+          client.callToolRaw('save_waybill_draft', missingEnd),
+        ).rejects.toThrow();
+      }
 
       // Non-positive quantity
       await expect(
@@ -676,6 +780,21 @@ describe('save_waybill_draft Zod validation failures', () => {
         }),
       ).rejects.toThrow();
 
+      // Impossible calendar dates on beginDate and deliveryDate
+      await expect(
+        client.callToolRaw('save_waybill_draft', {
+          ...validBase,
+          beginDate: '2026-02-30T12:00:00',
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        client.callToolRaw('save_waybill_draft', {
+          ...validBase,
+          deliveryDate: '2026-13-01T10:00:00',
+        }),
+      ).rejects.toThrow();
+
       // Deletion status (-1) without existing Line Item ID
       await expect(
         client.callToolRaw('save_waybill_draft', {
@@ -722,6 +841,8 @@ describe('save_waybill_draft RS.ge error translation', () => {
       const result = await client.callToolRaw('save_waybill_draft', {
         waybillType: 2,
         buyerTin: '206322102',
+        startAddress: 'თბილისი',
+        endAddress: 'ბათუმი',
         lineItems: [{ name: 'ტესტი', unitId: 1, quantity: 1, unitPrice: 10 }],
       });
 
@@ -777,6 +898,8 @@ describe('save_waybill_draft RS.ge error translation', () => {
       const result = await client.callToolRaw('save_waybill_draft', {
         waybillType: 2,
         buyerTin: '206322102',
+        startAddress: 'თბილისი',
+        endAddress: 'ბათუმი',
         lineItems: [
           { name: 'სწორი პოზიცია', unitId: 1, quantity: 1, unitPrice: 10 },
           {
@@ -855,6 +978,8 @@ describe('save_waybill_draft RS.ge error translation', () => {
       const result = await client.callToolRaw('save_waybill_draft', {
         waybillType: 2,
         buyerTin: '206322102',
+        startAddress: 'თბილისი',
+        endAddress: 'ბათუმი',
         lineItems: [{ name: 'უცნობი ერთეული', unitId: 777, quantity: 1, unitPrice: 5 }],
       });
 
@@ -906,6 +1031,8 @@ describe('save_waybill_draft RS.ge error translation', () => {
       const failed = await client.callToolRaw('save_waybill_draft', {
         waybillType: 2,
         buyerTin: '206322102',
+        startAddress: 'თბილისი',
+        endAddress: 'ბათუმი',
         lineItems: [{ name: 'ტესტი', unitId: 1, quantity: 1, unitPrice: 10 }],
       });
 
@@ -921,10 +1048,64 @@ describe('save_waybill_draft RS.ge error translation', () => {
       const recovered = await client.callToolRaw('save_waybill_draft', {
         waybillType: 2,
         buyerTin: '206322102',
+        startAddress: 'თბილისი',
+        endAddress: 'ბათუმი',
         lineItems: [{ name: 'ტესტი', unitId: 1, quantity: 1, unitPrice: 10 }],
       });
       expect(recovered.isError).toBeFalsy();
       expect(authAttempts).toBe(2);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it('returns structured Georgian + English error when save_waybill returns STATUS=0 with missing or zero ID on creation', async () => {
+    let saveAttempt = 0;
+    const fakeFetch: typeof globalThis.fetch = vi.fn(async (_input, init) => {
+      const soapAction = new Headers(init?.headers).get('soapaction') ?? '';
+      if (soapAction === '"http://tempuri.org/chek_service_user"') {
+        return xmlResponse(checkServiceUserSuccessXml(731937, 20350));
+      }
+      if (soapAction === '"http://tempuri.org/save_waybill"') {
+        saveAttempt += 1;
+        if (saveAttempt === 1) {
+          // STATUS=0 with <ID>0</ID>
+          return xmlResponse(saveWaybillResultXml({ status: 0, id: 0 }));
+        }
+        // STATUS=0 with missing <ID> tag altogether
+        return xmlResponse(saveWaybillResultXml({ status: 0 }));
+      }
+      throw new Error(`Unexpected SOAPAction: ${soapAction}`);
+    });
+
+    const server = createRsgeServer({
+      config: createTestConfig(),
+      fetch: fakeFetch,
+      logLevel: 'silent',
+    });
+    const client = await Client.connect(server);
+
+    const draftInput = {
+      waybillType: 3,
+      buyerTin: '206322102',
+      lineItems: [{ name: 'ტესტი', unitId: 1, quantity: 1, unitPrice: 10 }],
+    };
+
+    try {
+      for (let i = 0; i < 2; i += 1) {
+        const result = await client.callToolRaw('save_waybill_draft', draftInput);
+        expect(result.isError).toBe(true);
+        const payload = JSON.parse(
+          result.content[0]?.type === 'text' ? result.content[0].text : '{}',
+        ) as Record<string, unknown>;
+        expect(payload.error).toBe('RSGE_MUTATION_FAILED');
+        expect(payload.executed).toBe(false);
+        expect(payload.waybillId).toBe(0);
+        expect(String(payload.message)).toMatch(/[ა-ჰ]/);
+        expect(String(payload.message)).toMatch(/[A-Za-z]{4,}/);
+        expect(String(payload.hint)).toMatch(/[ა-ჰ]/);
+      }
     } finally {
       await client.close();
       await server.close();

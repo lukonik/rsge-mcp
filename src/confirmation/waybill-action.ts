@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ServerContext } from '../context.js';
 import type { RsgeLogger } from '../logger.js';
 import { formatSoapErrorResult, toolErrorResult } from '../tools/errors.js';
+import { waybillIdSchema } from '../validation/common.js';
 import { fetchWaybillById, type Waybill } from '../waybill/index.js';
 import type { ConsumeConfirmationResult } from './store.js';
 
@@ -16,18 +17,10 @@ export interface WaybillConfirmationArgs {
   readonly confirmation_token?: string;
 }
 
-export const waybillIdConfirmationField = z
-  .number()
-  .int(
-    'ზედნადების ID (waybill_id) უნდა იყოს მთელი რიცხვი. waybill_id must be an integer.',
-  )
-  .positive(
-    'ზედნადების ID (waybill_id) უნდა იყოს დადებითი მთელი რიცხვი. waybill_id must be a positive integer.',
-  )
-  .describe(
-    'RS.ge ზედნადების რიცხვითი ID (მაგ., 1551). ' +
-      'RS.ge numeric Waybill ID (e.g. 1551).',
-  );
+export const waybillIdConfirmationField = waybillIdSchema.describe(
+  'RS.ge ზედნადების რიცხვითი ID (მაგ., 1551). ' +
+    'RS.ge numeric Waybill ID (e.g. 1551).',
+);
 
 export const confirmationTokenField = z
   .string()
