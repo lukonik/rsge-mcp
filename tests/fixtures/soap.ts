@@ -150,11 +150,23 @@ export function rsgeResultStatusErrorXml(
 
 export function scalarOperationResultXml(
   operation: string,
-  value: string | number,
+  value: string | number | boolean,
 ): string {
   return soapEnvelope(
     `<${operation}Response xmlns="http://tempuri.org/">` +
       `<${operation}Result>${value}</${operation}Result>` +
       `</${operation}Response>`,
+  );
+}
+
+export function saveInvoiceResultXml(
+  resultCode: number,
+  outInvId: number,
+): string {
+  return soapEnvelope(
+    `<save_invoiceResponse xmlns="http://tempuri.org/">` +
+      `<save_invoiceResult>${resultCode}</save_invoiceResult>` +
+      `<out_inv_id>${outInvId}</out_inv_id>` +
+      `</save_invoiceResponse>`,
   );
 }

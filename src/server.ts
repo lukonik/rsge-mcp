@@ -12,6 +12,8 @@ import { registerGetWaybillTool } from './tools/get-waybill.js';
 import { registerListWaybillsTool } from './tools/list-waybills.js';
 import { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
 import { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
+import { registerBuyerActionTools } from './tools/buyer-actions.js';
+import { registerCreateWaybillInvoiceTool } from './tools/create-waybill-invoice.js';
 import { registerSellerLifecycleTools } from './tools/seller-lifecycle.js';
 
 export const SERVER_NAME = 'rsge-mcp';
@@ -73,6 +75,8 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
   registerListWaybillsTool(server, context);
   registerSaveWaybillDraftTool(server, context);
   registerSellerLifecycleTools(server, context);
+  registerBuyerActionTools(server, context);
+  registerCreateWaybillInvoiceTool(server, context);
 
   return server;
 }

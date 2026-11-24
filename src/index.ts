@@ -65,6 +65,8 @@ export { registerGetWaybillTool } from './tools/get-waybill.js';
 export { registerListWaybillsTool } from './tools/list-waybills.js';
 export { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
 export { registerSellerLifecycleTools } from './tools/seller-lifecycle.js';
+export { registerBuyerActionTools } from './tools/buyer-actions.js';
+export { registerCreateWaybillInvoiceTool } from './tools/create-waybill-invoice.js';
 export {
   CONFIRMATION_TOKEN_ARG_KEY,
   CONFIRMATION_TOKEN_TTL_MS,
