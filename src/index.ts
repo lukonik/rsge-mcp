@@ -60,6 +60,7 @@ export {
 export { registerReferenceResources } from './resources/reference.js';
 export { registerCheckConnectionTool } from './tools/check-connection.js';
 export { registerGetReferenceDataTool } from './tools/get-reference-data.js';
+export { registerLookupTaxpayerTool } from './tools/lookup-taxpayer.js';
 export {
   NETWORK_FAILURE_HINT,
   formatSoapErrorResult,
