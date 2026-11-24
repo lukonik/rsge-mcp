@@ -60,6 +60,17 @@ export {
 export { registerReferenceResources } from './resources/reference.js';
 export { registerCheckConnectionTool } from './tools/check-connection.js';
 export { registerGetReferenceDataTool } from './tools/get-reference-data.js';
+export { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
+export {
+  buildDraftWaybillXml,
+  draftLineItemInputSchema,
+  saveWaybillDraftInputSchema,
+  type BuiltDraftWaybill,
+  type ComputedDraftLineItem,
+  type DraftLineItemInput,
+  type SaveWaybillDraftInput,
+  type SellerIdentity,
+} from './waybill/draft-builder.js';
 export {
   NETWORK_FAILURE_HINT,
   formatSoapErrorResult,

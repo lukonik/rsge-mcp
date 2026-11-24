@@ -7,6 +7,7 @@ import { registerReferenceResources } from './resources/reference.js';
 import { createSoapClient } from './soap/index.js';
 import { registerCheckConnectionTool } from './tools/check-connection.js';
 import { registerGetReferenceDataTool } from './tools/get-reference-data.js';
+import { registerSaveWaybillDraftTool } from './tools/save-waybill-draft.js';
 
 export const SERVER_NAME = 'rsge-mcp';
 export const SERVER_VERSION = '0.1.0';
@@ -59,6 +60,7 @@ export function createRsgeServer(options: CreateRsgeServerOptions): FastMCP {
   registerReferenceResources(server, context);
   registerCheckConnectionTool(server, context);
   registerGetReferenceDataTool(server, context);
+  registerSaveWaybillDraftTool(server, context);
 
   return server;
 }
